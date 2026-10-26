@@ -1,96 +1,56 @@
 # NHL Goal Light 🚨
 
-Real-time NHL goal detector that flashes your **TP-Link Kasa smart bulb(s)** in your favourite team's colours the moment a goal is scored — with a web-based GUI to configure everything.
-
-![Python](https://img.shields.io/badge/Python-3.9%2B-blue?style=flat-square)
-![Flask](https://img.shields.io/badge/Flask-SSE-lightgrey?style=flat-square)
-![License](https://img.shields.io/badge/License-MIT-green?style=flat-square)
-
----
+Real-time NHL goal detector that flashes your **TP-Link Kasa smart bulb(s)** in the scoring team's colours, with a web GUI to configure everything.
 
 ## Features
 
-- 🏒 **Live goal detection** — polls the NHL API every ~1 s during live play, drops to 0.75 s in the final minute of a period
-- 💡 **Multi-bulb support** — flash multiple Kasa bulbs simultaneously; add one IP per line in the GUI
-- 🎨 **Team colour flashing** — bulb strobes between each team's primary and secondary HSV colours
-- 📺 **Per-game TV delay** — set a custom stream delay (seconds) per game row so the flash syncs perfectly with your broadcast
-- 🌐 **Web GUI** — dark/light theme, live log stream, sidebar settings, mobile responsive with slide-in drawer
-- ⚡ **Simulate Goal** — fire a test flash for any team without waiting for a real goal
-- 🔄 **Exponential backoff** — graceful retry logic on NHL API failures
-- 💾 **Persistent settings** — bulb IPs saved to `localStorage` across sessions
+- 🏒 **Live goal detection** — polls the NHL API every ~1 s (0.75 s in the final minute of a period)
+- 💡 **Multi-bulb support** — one IP per line; all bulbs flash in parallel, and one dead bulb never blocks the others
+- 🎨 **Team colour flashing** — strobes between each team's primary and secondary colours
+- ⭐ **Primary team** — pick your team (default **Montreal**); its games are starred, listed first and pre-selected
+- ⏱ **Per-team TV delay** — primary-team games use their own delay; every other game defaults to **45 s**; any single game can still be overridden
+- ⚡ **Simulate Goal**, 🌐 **web GUI** (dark/light, live log, mobile drawer), 🔄 **exponential backoff**
 
----
-
-## Requirements
-
-- Python 3.9+
-- TP-Link Kasa smart bulb (colour, e.g. KL130)
-- Bulb on the same local network as the machine running the script
+## Quick start
 
 ```bash
-pip install flask python-kasa requests
+pip install -r requirements.txt
+python server.py          # then open http://localhost:5000
 ```
 
----
+## TV delay
 
-## Quick Start
+| Game                              | Delay                                   |
+|-----------------------------------|-----------------------------------------|
+| Involves the **primary team**     | `primary_delay_seconds` (default 35 s)  |
+| Any other game                    | `default_delay_seconds` (default 45 s)  |
+| Edited in the game row (yellow)   | that value, for that game only          |
 
-```bash
-# 1. Clone
-git clone https://github.com/kyler1709/NHL-BULB.git
-cd NHL-BULB
+Change the primary team and both delays under **Teams & Delay** in the sidebar (click *Apply*). *Reset delays* clears per-game overrides.
+Delays are read when monitoring starts. Stop and start again to apply changes.
 
-# 2. Install dependencies
-pip install flask python-kasa requests
+CLI equivalents: `PRIMARY_TEAM=MTL PRIMARY_DELAY_SECONDS=35 DEFAULT_DELAY_SECONDS=45 GAME_DELAYS='{"2025020123": 30}'`.
 
-# 3. Run the server
-python server.py
+## Configuration reference
 
-# 4. Open the GUI
-# Visit http://localhost:5000 in your browser (or your LAN IP for mobile)
-```
-
----
-
-## GUI Overview
-
-### Sidebar — Settings
-
-| Section | Key Settings |
-|---|---|
-| **Bulbs** | One IP per line — all bulbs flash simultaneously |
-| **Flash** | Duration, strobe interval, crossfade transition |
-| **Polling** | Live / Critical / Pregame / Error intervals |
-| **Network** | Request timeout, max retries, backoff base & max |
-| **Timing** | Pregame buffer, restore transition, default TV delay |
-
-### Main Panel
-
-- **Today's Games** — lists all NHL games with live/final/scheduled badges, team colour swatches, and a per-game TV delay override
-- **Live Log** — SSE-streamed output; goals highlighted in red, errors in orange
-- **Simulate Goal** — pick any team and fire a test flash instantly
-
-## Configuration Reference
-
-| Parameter | Default | Description |
-|---|---|---|
-| `flash_duration` | 12 s | How long the bulb flashes after a goal |
-| `flash_interval` | 0.45 s | Strobe speed (lower = faster) |
-| `flash_quiet_window` | 1.5 s | Post-flash wait before restoring (burst goal protection) |
-| `flash_transition_ms` | 120 ms | Colour crossfade time (0 = instant) |
-| `poll_live_seconds` | 1.0 s | API poll rate during live play |
-| `poll_critical_seconds` | 0.75 s | Poll rate in the final minute of a period |
-| `poll_pregame_seconds` | 10 s | Poll rate before puck drop |
-| `poll_error_seconds` | 5 s | Retry wait after API failure |
-| `request_timeout` | 10 s | NHL API request timeout |
-| `max_retries` | 4 | Max retries per failed request |
-| `backoff_base` | 1.0 s | Starting backoff (doubles each retry) |
-| `backoff_max` | 30 s | Backoff cap |
-| `pregame_buffer_seconds` | 300 s | Wake-up lead time before puck drop |
-| `restore_transition_ms` | 150 ms | Fade time back to original colour |
-| `goal_delay_seconds` | 35 s | Global TV delay (overridable per game) |
-
----
+| Parameter                | Default | Description                                   |
+|--------------------------|---------|-----------------------------------------------|
+| `primary_team`           | MTL     | Team whose games use the primary delay        |
+| `primary_delay_seconds`  | 35 s    | TV delay for primary-team games               |
+| `default_delay_seconds`  | 45 s    | TV delay for all other games                  |
+| `flash_duration`         | 12 s    | How long the bulb flashes after a goal        |
+| `flash_interval`         | 0.45 s  | Strobe speed (lower = faster)                 |
+| `flash_quiet_window`     | 1.5 s   | Post-flash wait before restoring (bursts)     |
+| `flash_transition_ms`    | 120 ms  | Colour crossfade (0 = instant)                |
+| `poll_live_seconds`      | 1.0 s   | Poll rate during live play                    |
+| `poll_critical_seconds`  | 0.75 s  | Poll rate in the final minute of a period     |
+| `poll_pregame_seconds`   | 10 s    | Poll rate before puck drop                    |
+| `poll_error_seconds`     | 5 s     | Retry wait after API failure                  |
+| `request_timeout`        | 10 s    | NHL API request timeout                       |
+| `max_retries`            | 4       | Retries after the first failed request        |
+| `backoff_base` / `_max`  | 1 / 30 s| Exponential backoff start / cap               |
+| `pregame_buffer_seconds` | 300 s   | Wake-up lead time before puck drop            |
+| `restore_transition_ms`  | 150 ms  | Fade back to the original colour              |
 
 ## License
 

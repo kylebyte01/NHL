@@ -8,21 +8,12 @@
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet" />
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
 :root {
-  --bg: #171614;
-  --surface: #1c1b19;
-  --surface2: #242320;
-  --border: #2e2d2a;
-  --text: #e8e6e0;
-  --muted: #7a7870;
-  --accent: #cc0000;
-  --accent-dim:#8b0000;
-  --red: #d44c4c;
-  --green: #4caf50;
-  --yellow: #c9a227;
-  --radius: 5px;
-  --sidebar-w: 240px;
-  --header-h: 44px;
+  --bg: #171614; --surface: #1c1b19; --surface2: #242320; --border: #2e2d2a;
+  --text: #e8e6e0; --muted: #7a7870; --accent: #cc0000; --accent-dim: #8b0000;
+  --red: #d44c4c; --green: #4caf50; --yellow: #c9a227; --gold: #e0b43a;
+  --radius: 5px; --sidebar-w: 240px; --header-h: 44px;
 }
 [data-theme="light"] {
   --bg: #f4f3f0; --surface: #ffffff; --surface2: #ebebea;
@@ -31,38 +22,34 @@
 [data-theme="light"] .log-wrap { background: #f5f5f5; }
 [data-theme="light"] .log-line { color: #2a2a2a; }
 [data-theme="light"] #global-tip { background:#fff!important; color:#1a1916!important; border-color:#d0cfc9!important; }
+
 html, body {
-  height: 100%; font-family: 'Satoshi', system-ui, sans-serif;
-  font-size: 13px; background: var(--bg); color: var(--text);
-  line-height: 1.5; -webkit-tap-highlight-color: transparent;
+  height: 100%; font-family: 'Satoshi', system-ui, sans-serif; font-size: 13px;
+  background: var(--bg); color: var(--text); line-height: 1.5; -webkit-tap-highlight-color: transparent;
 }
 
 /* ── Layout ── */
 .app {
-  display: grid;
-  grid-template-rows: var(--header-h) 1fr;
-  grid-template-columns: var(--sidebar-w) 1fr;
+  display: grid; grid-template-rows: var(--header-h) 1fr; grid-template-columns: var(--sidebar-w) 1fr;
   height: 100vh; overflow: hidden;
 }
 header {
-  grid-column: 1 / -1; display: flex; align-items: center;
-  gap: 10px; padding: 0 16px; background: var(--surface);
-  border-bottom: 1px solid var(--border); position: relative; z-index: 200;
+  grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 0 16px;
+  background: var(--surface); border-bottom: 1px solid var(--border); position: relative; z-index: 200;
 }
-.logo { font-weight: 700; font-size: 14px; letter-spacing: -0.2px; color: var(--text); }
+.logo { font-weight: 700; font-size: 14px; letter-spacing: -0.2px; }
 .logo span { color: var(--accent); }
 .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
 .status-pill {
-  font-size: 11px; font-weight: 500; padding: 2px 10px;
-  border-radius: 20px; background: var(--surface2);
-  border: 1px solid var(--border); color: var(--muted); transition: background .2s, color .2s;
+  font-size: 11px; font-weight: 500; padding: 2px 10px; border-radius: 20px;
+  background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
+  transition: background .2s, color .2s;
 }
 .status-pill.monitoring { background: #1a3a1e; border-color: #2d6633; color: var(--green); }
 .icon-btn {
-  background: none; border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--muted); width: 32px; height: 32px; cursor: pointer; font-size: 15px;
-  display: flex; align-items: center; justify-content: center;
-  transition: border-color .15s, color .15s; flex-shrink: 0;
+  background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted);
+  width: 32px; height: 32px; cursor: pointer; font-size: 15px; display: flex; align-items: center;
+  justify-content: center; transition: border-color .15s, color .15s; flex-shrink: 0;
 }
 .icon-btn:hover { border-color: var(--accent); color: var(--accent); }
 #menu-btn { display: none; }
@@ -70,53 +57,35 @@ header {
 /* ── Sidebar ── */
 .sidebar {
   background: var(--surface); border-right: 1px solid var(--border);
-  overflow-x: hidden; overflow-y: auto; padding: 12px 0 32px;
-  transition: transform .25s ease;
+  overflow-x: hidden; overflow-y: auto; padding: 12px 0 32px; transition: transform .25s ease;
 }
 .sidebar-section { padding: 0 12px; margin-bottom: 14px; }
 .section-label {
-  font-size: 10px; font-weight: 700; letter-spacing: .08em;
-  text-transform: uppercase; color: var(--muted);
-  margin-bottom: 8px; padding: 0 2px;
-  display: flex; align-items: center; gap: 5px;
+  font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--muted); margin-bottom: 8px; padding: 0 2px; display: flex; align-items: center; gap: 5px;
 }
 .section-dirty {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: var(--yellow); flex-shrink: 0;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); flex-shrink: 0;
   opacity: 0; transition: opacity .2s;
 }
 .section-dirty.visible { opacity: 1; }
 .field { margin-bottom: 7px; }
-.field label {
-  display: flex; align-items: center; gap: 4px;
-  font-size: 11px; color: var(--muted); margin-bottom: 3px;
+.field label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+.field input[type="text"], .field input[type="number"], .field textarea, .field select {
+  width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); font-family: inherit; font-size: 12px; padding: 4px 8px; outline: none;
+  transition: border-color .15s;
 }
-.field input[type="text"],
-.field input[type="number"],
-.field textarea {
-  width: 100%; background: var(--surface2);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--text); font-family: inherit; font-size: 12px;
-  padding: 4px 8px; outline: none; transition: border-color .15s; resize: vertical;
-}
-.field input.pending,
-.field textarea.pending { border-color: var(--yellow) !important; }
-.field input:focus, .field textarea:focus { border-color: var(--accent); }
-.field select {
-  width: 100%; background: var(--surface2);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--text); font-family: inherit; font-size: 12px;
-  padding: 4px 8px; outline: none; cursor: pointer; transition: border-color .15s;
-}
-.field select:focus { border-color: var(--accent); }
+.field textarea { resize: vertical; }
+.field select { cursor: pointer; }
+.field .pending { border-color: var(--yellow) !important; }
+.field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
+
 .btn {
-  display: inline-flex; align-items: center; gap: 5px;
-  font-family: inherit; font-size: 12px; font-weight: 500;
-  padding: 6px 13px; border-radius: var(--radius);
-  border: 1px solid var(--border); background: var(--surface2);
-  color: var(--text); cursor: pointer;
-  transition: background .15s, border-color .15s, color .15s, opacity .15s;
-  touch-action: manipulation;
+  display: inline-flex; align-items: center; gap: 5px; font-family: inherit; font-size: 12px; font-weight: 500;
+  padding: 6px 13px; border-radius: var(--radius); border: 1px solid var(--border);
+  background: var(--surface2); color: var(--text); cursor: pointer;
+  transition: background .15s, border-color .15s, color .15s, opacity .15s; touch-action: manipulation;
 }
 .btn:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
 .btn:disabled { opacity: .38; cursor: not-allowed; }
@@ -124,161 +93,77 @@ header {
 .btn-primary:hover:not(:disabled) { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
 .btn-danger { border-color: var(--red); color: var(--red); }
 .btn-danger:hover:not(:disabled) { background: #3a1515; border-color: var(--red); }
-.btn-xs { font-size: 10px; padding: 2px 7px; border-radius: 3px; }
-.btn-apply {
-  width: 100%; justify-content: center; margin-top: 6px;
-  font-size: 11px; padding: 4px 10px;
-  color: var(--muted); border-color: var(--border);
-}
-.btn-apply.has-changes {
-  border-color: var(--yellow); color: var(--yellow);
-}
-.btn-apply.applied {
-  border-color: var(--green) !important; color: var(--green) !important;
-}
+.btn-apply { width: 100%; justify-content: center; margin-top: 6px; font-size: 11px; padding: 4px 10px; color: var(--muted); }
+.btn-apply.has-changes { border-color: var(--yellow); color: var(--yellow); }
+.btn-apply.applied { border-color: var(--green) !important; color: var(--green) !important; }
 
-/* ── Bulb status ── */
 .bulb-status {
-  margin-top: 6px; display: flex; align-items: center; gap: 6px;
-  padding: 5px 8px; border-radius: var(--radius);
-  border: 1px solid var(--border); background: var(--surface2);
-  font-size: 11px; color: var(--muted); min-height: 28px;
+  margin-top: 6px; display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--radius);
+  border: 1px solid var(--border); background: var(--surface2); font-size: 11px; color: var(--muted); min-height: 28px;
 }
-.bulb-status .dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--muted); flex-shrink: 0; transition: background .2s;
-}
+.bulb-status .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
 .bulb-status.connected { border-color: #2d6633; color: var(--green); }
 .bulb-status.connected .dot { background: var(--green); }
 .bulb-status.disconnected { border-color: #6b2020; color: var(--red); }
 .bulb-status.disconnected .dot { background: var(--red); }
 
-/* ── Tooltip ── */
 .tip {
-  display: inline-flex; align-items: center; justify-content: center;
-  width: 13px; height: 13px; border-radius: 50%;
-  background: var(--surface2); border: 1px solid var(--border);
-  color: var(--muted); font-size: 9px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; border-radius: 50%;
+  background: var(--surface2); border: 1px solid var(--border); color: var(--muted); font-size: 9px; font-weight: 700;
   cursor: default; flex-shrink: 0;
 }
 
 /* ── Main ── */
-.main {
-  overflow-y: auto; padding: 16px 20px;
-  display: flex; flex-direction: column; gap: 16px;
-}
-.panel {
-  background: var(--surface); border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden;
-}
+.main { overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
 .panel-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 9px 14px; border-bottom: 1px solid var(--border);
-  font-size: 12px; font-weight: 500;
+  display: flex; align-items: center; justify-content: space-between; padding: 9px 14px;
+  border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 500;
 }
-.panel-header-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.panel-header-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.panel-header .btn { padding: 4px 10px; font-size: 11px; }
 
-/* ── Games list ── */
+/* ── Games ── */
 #game-list { list-style: none; }
 .game-row {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 14px; border-bottom: 1px solid var(--border);
-  transition: background .1s; flex-wrap: nowrap; min-width: 0;
+  display: flex; align-items: center; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--border);
+  transition: background .1s; min-width: 0;
 }
 .game-row:last-child { border-bottom: none; }
 .game-row:hover { background: var(--surface2); }
-.game-row input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; flex-shrink:0; width:15px; height:15px; }
+.game-row.primary { box-shadow: inset 3px 0 0 var(--gold); }
+.game-row input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; width: 15px; height: 15px; }
+.game-star { color: var(--gold); font-size: 12px; flex-shrink: 0; }
 .game-matchup {
-  flex: 1; font-size: 12.5px; font-weight: 500; cursor: pointer;
-  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  flex: 1; font-size: 12.5px; font-weight: 500; cursor: pointer; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .game-time { font-size: 11px; color: var(--muted); white-space: nowrap; flex-shrink: 0; }
 .game-badge {
-  font-size: 10px; font-weight: 700; padding: 1px 6px;
-  border-radius: 3px; letter-spacing: .04em;
-  background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
-  white-space: nowrap; flex-shrink: 0;
+  font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 3px; letter-spacing: .04em;
+  background: var(--surface2); border: 1px solid var(--border); color: var(--muted); white-space: nowrap; flex-shrink: 0;
 }
 .game-badge.live { background: #1a3a1e; border-color: #2d6633; color: var(--green); }
-.game-badge.final { background: var(--surface2); color: var(--muted); }
-.game-badge.fut { background: var(--surface2); color: var(--muted); }
-
-/* Live game clock display */
 .game-clock {
-  font-size: 10px; font-weight: 600; color: var(--green);
-  white-space: nowrap; flex-shrink: 0; font-family: 'JetBrains Mono', monospace;
-  background: #1a3a1e; border: 1px solid #2d6633;
-  padding: 1px 5px; border-radius: 3px;
-  display: none;
+  display: none; font-size: 10px; font-weight: 600; color: var(--green); white-space: nowrap; flex-shrink: 0;
+  font-family: 'JetBrains Mono', monospace; background: #1a3a1e; border: 1px solid #2d6633; padding: 1px 5px; border-radius: 3px;
 }
 .game-clock.visible { display: inline-block; }
 .game-clock.intermission { color: var(--yellow); background: #2e2a10; border-color: #5a4a10; }
-
-/* Team colour swatches */
 .team-swatches { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
 .swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(255,255,255,.10); flex-shrink: 0; }
 .swatch-sep { width: 1px; height: 12px; background: var(--border); margin: 0 3px; flex-shrink: 0; }
 
-/* per-game delay + calibrate */
-.game-delay-wrap { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
-.game-delay-wrap label { font-size: 10px; color: var(--muted); white-space: nowrap; }
+.game-delay-wrap { display: flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 10px; color: var(--muted); }
 .game-delay-input {
-  width: 42px; background: var(--surface2);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--text); font-family: inherit; font-size: 11px;
-  padding: 2px 4px; outline: none; transition: border-color .15s; text-align: center;
+  width: 46px; background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
+  color: var(--text); font-family: inherit; font-size: 11px; padding: 2px 4px; outline: none; text-align: center;
 }
 .game-delay-input:focus { border-color: var(--accent); }
-.game-delay-input.pending { border-color: var(--yellow); }
-
-/* Delay Apply button */
-.delay-apply-btn {
-  font-size: 10px; padding: 2px 6px; border-radius: 3px;
-  border: 1px solid var(--border); background: var(--surface2);
-  color: var(--muted); cursor: pointer; font-family: inherit;
-  transition: border-color .15s, color .15s; flex-shrink: 0;
-  display: none;
-}
-.delay-apply-btn.visible { display: inline-flex; align-items: center; }
-.delay-apply-btn:hover { border-color: var(--accent); color: var(--accent); }
-.delay-apply-btn.applied { border-color: var(--green); color: var(--green); }
-
-/* Calibrate popover */
-.cal-wrap { position: relative; flex-shrink: 0; }
-.cal-popover {
-  display: none;
-  position: fixed;
-  z-index: 1000;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  width: 230px;
-  max-height: 80vh;
-  overflow-y: auto;
-  box-shadow: 0 8px 24px rgba(0,0,0,.45);
-  gap: 8px;
-  flex-direction: column;
-}
-.cal-popover.open { display: flex; }
-.cal-popover label { font-size: 11px; color: var(--muted); margin-bottom: 2px; display:block; }
-.cal-popover input, .cal-popover select {
-  width: 100%; background: var(--surface2);
-  border: 1px solid var(--border); border-radius: var(--radius);
-  color: var(--text); font-family: inherit; font-size: 12px; padding: 4px 7px; outline: none;
-}
-.cal-popover input:focus, .cal-popover select:focus { border-color: var(--accent); }
-.cal-autodetect {
-  font-size: 10px; padding: 4px 7px; border-radius: 3px;
-  background: var(--surface2); border: 1px solid var(--border);
-  color: var(--muted); display: flex; align-items: center; gap: 5px;
-}
-.cal-autodetect.live { border-color: #2d6633; color: var(--green); background: #1a3a1e; }
-.cal-autodetect.err { border-color: #6b2020; color: var(--red); }
-.cal-result { font-size: 11px; min-height: 14px; }
-.cal-result.ok { color: var(--green); }
-.cal-result.err { color: var(--red); }
+.game-delay-input.manual { border-color: var(--yellow); }
+.game-delay-input:disabled { opacity: .5; }
 .games-empty { padding: 20px 14px; color: var(--muted); font-size: 12px; text-align: center; }
+.games-hint { padding: 7px 14px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); }
 
 /* ── Simulate ── */
 .simulate-body { display: flex; align-items: center; gap: 8px; padding: 10px 14px; flex-wrap: wrap; }
@@ -288,9 +173,8 @@ header {
 
 /* ── Log ── */
 .log-wrap {
-  background: #0e0e0c; font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
-  font-size: 11.5px; height: 380px; overflow-y: auto;
-  padding: 8px 12px; border-bottom: 1px solid var(--border);
+  background: #0e0e0c; font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 11.5px;
+  height: 380px; overflow-y: auto; padding: 8px 12px; border-bottom: 1px solid var(--border);
 }
 .log-line { line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
 .log-line.goal { color: var(--accent); font-weight: 600; }
@@ -298,27 +182,18 @@ header {
 .log-line.done { color: var(--muted); font-style: italic; }
 .log-line.history { color: #555; }
 .log-footer { display: flex; align-items: center; gap: 10px; padding: 7px 14px; }
-.autoscroll-label {
-  display: flex; align-items: center; gap: 5px;
-  font-size: 11px; color: var(--muted); cursor: pointer; user-select: none;
-}
+.autoscroll-label { display: flex; align-items: center; gap: 5px; font-size: 11px; color: var(--muted); cursor: pointer; user-select: none; }
 .autoscroll-label input { accent-color: var(--accent); }
-.log-count { font-size: 10px; color: var(--muted); margin-left: auto; }
-.controls {
-  display: flex; gap: 8px; padding: 12px 14px;
-  border-top: 1px solid var(--border); flex-wrap: wrap;
-}
+.log-count { font-size: 10px; color: var(--muted); }
+.controls { display: flex; gap: 8px; padding: 12px 14px; border-top: 1px solid var(--border); flex-wrap: wrap; align-items: center; }
+.run-hint { font-size: 11px; color: var(--muted); }
 
-/* ── Drawer overlay (mobile) ── */
 .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 149; }
-
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
-
-input[type="number"]::-webkit-inner-spin-button,
-input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; }
 
 @media (max-width: 680px) {
@@ -326,12 +201,8 @@ input[type="number"] { -moz-appearance: textfield; }
   #menu-btn { display: flex; }
   .app { grid-template-columns: 1fr; grid-template-rows: var(--header-h) 1fr; }
   .sidebar {
-    position: fixed; top: 0; left: 0;
-    width: min(var(--sidebar-w), 82vw); height: 100dvh;
-    z-index: 150; transform: translateX(-110%);
-    border-right: 1px solid var(--border);
-    padding-top: calc(var(--header-h) + 8px);
-    box-shadow: 4px 0 24px rgba(0,0,0,.4);
+    position: fixed; top: 0; left: 0; width: min(var(--sidebar-w), 82vw); height: 100dvh; z-index: 150;
+    transform: translateX(-110%); padding-top: calc(var(--header-h) + 8px); box-shadow: 4px 0 24px rgba(0,0,0,.4);
   }
   .sidebar.open { transform: translateX(0); }
   .sidebar-overlay.open { display: block; }
@@ -345,13 +216,13 @@ input[type="number"] { -moz-appearance: textfield; }
   #global-tip { max-width: 220px !important; }
 }
 @media (max-width: 430px) {
-  .game-time { display: none; }
-  .game-clock { display: none !important; }
+  .game-time, .game-clock { display: none !important; }
 }
 </style>
 </head>
 <body>
 <div class="app">
+
   <header>
     <button class="icon-btn" id="menu-btn" title="Settings" aria-label="Toggle settings">
       <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
@@ -370,22 +241,37 @@ input[type="number"] { -moz-appearance: textfield; }
   <aside class="sidebar" id="sidebar">
 
     <!-- Bulbs -->
-    <div class="sidebar-section" data-section="bulbs">
+    <div class="sidebar-section">
       <div class="section-label">Bulbs <span class="section-dirty" id="dirty-bulbs"></span></div>
       <div class="field">
         <label>IP Addresses <span class="tip" data-tip="One IP per line. All bulbs flash simultaneously on a goal.">?</span></label>
         <textarea id="bulb-ips" rows="3" placeholder="192.168.x.x&#10;192.168.x.y"></textarea>
       </div>
       <button class="btn" id="test-btn" style="width:100%;justify-content:center">Test Connection</button>
-      <div class="bulb-status" id="bulb-status">
-        <div class="dot"></div>
-        <span id="bulb-status-text">Not tested</span>
-      </div>
+      <div class="bulb-status" id="bulb-status"><div class="dot"></div><span id="bulb-status-text">Not tested</span></div>
       <button class="btn btn-apply" data-apply="bulbs">Apply</button>
     </div>
 
+    <!-- Teams & Delay -->
+    <div class="sidebar-section">
+      <div class="section-label">Teams &amp; Delay <span class="section-dirty" id="dirty-teams"></span></div>
+      <div class="field">
+        <label>Primary team <span class="tip" data-tip="Games involving this team use the primary-team delay below and are listed first.">?</span></label>
+        <select id="primary_team"></select>
+      </div>
+      <div class="field">
+        <label>Primary team delay (s) <span class="tip" data-tip="TV delay for any game involving your primary team.">?</span></label>
+        <input type="number" id="primary_delay_seconds" value="35" min="0" step="1" />
+      </div>
+      <div class="field">
+        <label>All other teams (s) <span class="tip" data-tip="Default TV delay for every other game. You can still override a single game in the list.">?</span></label>
+        <input type="number" id="default_delay_seconds" value="45" min="0" step="1" />
+      </div>
+      <button class="btn btn-apply" data-apply="teams">Apply</button>
+    </div>
+
     <!-- Flash -->
-    <div class="sidebar-section" data-section="flash">
+    <div class="sidebar-section">
       <div class="section-label">Flash <span class="section-dirty" id="dirty-flash"></span></div>
       <div class="field"><label>Duration (s) <span class="tip" data-tip="How long the bulb flashes after a goal.">?</span></label><input type="number" id="flash_duration" value="12" min="1" step="1" /></div>
       <div class="field"><label>Interval (s) <span class="tip" data-tip="How fast the bulb alternates colors. Lower = faster strobe.">?</span></label><input type="number" id="flash_interval" value="0.45" min="0.05" step="0.05" /></div>
@@ -395,7 +281,7 @@ input[type="number"] { -moz-appearance: textfield; }
     </div>
 
     <!-- Polling -->
-    <div class="sidebar-section" data-section="polling">
+    <div class="sidebar-section">
       <div class="section-label">Polling <span class="section-dirty" id="dirty-polling"></span></div>
       <div class="field"><label>Live (s) <span class="tip" data-tip="How often the NHL API is polled during a live game.">?</span></label><input type="number" id="poll_live_seconds" value="1.0" min="0.1" step="0.1" /></div>
       <div class="field"><label>Critical (s) <span class="tip" data-tip="Poll interval in the final minute of a period.">?</span></label><input type="number" id="poll_critical_seconds" value="0.75" min="0.1" step="0.05" /></div>
@@ -405,7 +291,7 @@ input[type="number"] { -moz-appearance: textfield; }
     </div>
 
     <!-- Network -->
-    <div class="sidebar-section" data-section="network">
+    <div class="sidebar-section">
       <div class="section-label">Network <span class="section-dirty" id="dirty-network"></span></div>
       <div class="field"><label>Request timeout (s) <span class="tip" data-tip="Max wait for NHL API response before treating as failed.">?</span></label><input type="number" id="request_timeout" value="10" min="1" step="1" /></div>
       <div class="field"><label>Max retries <span class="tip" data-tip="Times to retry a failed NHL API request.">?</span></label><input type="number" id="max_retries" value="4" min="0" step="1" /></div>
@@ -415,32 +301,28 @@ input[type="number"] { -moz-appearance: textfield; }
     </div>
 
     <!-- Timing -->
-    <div class="sidebar-section" data-section="timing">
+    <div class="sidebar-section">
       <div class="section-label">Timing <span class="section-dirty" id="dirty-timing"></span></div>
       <div class="field"><label>Pregame buffer (s) <span class="tip" data-tip="Seconds before puck drop to start polling. Default 300 = 5 min early.">?</span></label><input type="number" id="pregame_buffer_seconds" value="300" min="0" step="30" /></div>
       <div class="field"><label>Restore transition (ms) <span class="tip" data-tip="Fade time back to original color after flash.">?</span></label><input type="number" id="restore_transition_ms" value="150" min="0" step="10" /></div>
-      <div class="field">
-        <label>Default TV Delay (s) <span class="tip" data-tip="Global fallback delay. Each game row can override this individually.">?</span></label>
-        <input type="number" id="goal_delay_seconds" value="35" min="0" step="1" />
-      </div>
       <button class="btn btn-apply" data-apply="timing">Apply</button>
     </div>
-
   </aside>
 
   <main class="main">
+
     <div class="panel">
       <div class="panel-header">
         <span>Today's Games</span>
         <div class="panel-header-actions">
           <button class="btn" id="select-all-btn">Select All</button>
           <button class="btn" id="deselect-all-btn">Deselect All</button>
+          <button class="btn" id="reset-delays-btn" title="Clear per-game delay overrides">Reset delays</button>
           <button class="btn" id="refresh-games-btn">↻ Refresh</button>
         </div>
       </div>
-      <ul id="game-list">
-        <li class="games-empty" id="games-loading">Loading games…</li>
-      </ul>
+      <ul id="game-list"><li class="games-empty">Loading games…</li></ul>
+      <div class="games-hint" id="games-hint"></div>
     </div>
 
     <div class="panel" style="flex:1;display:flex;flex-direction:column;">
@@ -453,13 +335,12 @@ input[type="number"] { -moz-appearance: textfield; }
       </div>
       <div class="log-wrap" id="log-wrap"></div>
       <div class="log-footer">
-        <label class="autoscroll-label">
-          <input type="checkbox" id="autoscroll" checked /> Auto-scroll
-        </label>
+        <label class="autoscroll-label"><input type="checkbox" id="autoscroll" checked /> Auto-scroll</label>
       </div>
       <div class="controls">
         <button class="btn btn-primary" id="start-btn">▶ Start Monitoring</button>
         <button class="btn btn-danger" id="stop-btn" disabled>■ Stop</button>
+        <span class="run-hint" id="run-hint" style="display:none">Settings &amp; delays are read at start — stop and start again to apply changes.</span>
       </div>
     </div>
 
@@ -481,782 +362,421 @@ input[type="number"] { -moz-appearance: textfield; }
 <script>
 "use strict";
 
-let _es = null;
-let _statusTimer = null;
-let _teamColors = {};
-let _gameClockTimer = null;
-let _liveGameIds = new Set();
-
-const TEAM_NAMES = {
-  "ANA":"Anaheim Ducks","BOS":"Boston Bruins","BUF":"Buffalo Sabres",
-  "CGY":"Calgary Flames","CAR":"Carolina Hurricanes","CHI":"Chicago Blackhawks",
-  "COL":"Colorado Avalanche","CBJ":"Columbus Blue Jackets","DAL":"Dallas Stars",
-  "DET":"Detroit Red Wings","EDM":"Edmonton Oilers","FLA":"Florida Panthers",
-  "LAK":"Los Angeles Kings","MIN":"Minnesota Wild","MTL":"Montreal Canadiens",
-  "NSH":"Nashville Predators","NJD":"New Jersey Devils","NYI":"New York Islanders",
-  "NYR":"New York Rangers","OTT":"Ottawa Senators","PHI":"Philadelphia Flyers",
-  "PIT":"Pittsburgh Penguins","SJS":"San Jose Sharks","SEA":"Seattle Kraken",
-  "STL":"St. Louis Blues","TBL":"Tampa Bay Lightning","TOR":"Toronto Maple Leafs",
-  "UTA":"Utah Hockey Club","VAN":"Vancouver Canucks","VGK":"Vegas Golden Knights",
-  "WSH":"Washington Capitals","WPG":"Winnipeg Jets",
-};
-
-const SECTION_FIELDS = {
-  bulbs: ["bulb-ips"],
-  flash: ["flash_duration","flash_interval","flash_quiet_window","flash_transition_ms"],
-  polling: ["poll_live_seconds","poll_critical_seconds","poll_pregame_seconds","poll_error_seconds"],
-  network: ["request_timeout","max_retries","backoff_base","backoff_max"],
-  timing: ["pregame_buffer_seconds","restore_transition_ms","goal_delay_seconds"],
-};
-
 const $ = id => document.getElementById(id);
-const statusPill = $("status-pill");
-const startBtn = $("start-btn");
-const stopBtn = $("stop-btn");
-const testBtn = $("test-btn");
-const bulbStatus = $("bulb-status");
-const bulbStatusTx = $("bulb-status-text");
-const themeBtn = $("theme-btn");
-const menuBtn = $("menu-btn");
-const sidebar = $("sidebar");
-const overlay = $("sidebar-overlay");
-const logWrap = $("log-wrap");
-const autoscroll = $("autoscroll");
-const gameList = $("game-list");
-const clearLogBtn = $("clear-log-btn");
-const refreshBtn = $("refresh-games-btn");
-const selectAll = $("select-all-btn");
-const deselectAll = $("deselect-all-btn");
-const simBtn = $("sim-btn");
-const simResult = $("sim-result");
-const simTeam = $("sim-team");
-const tooltip = $("global-tip");
+const DEFAULT_PRIMARY = "MTL";
+const MAX_LOG_LINES = 2000;
 
-// ── Settings persistence ──────────────────────────────────────────────────────
-const SETTINGS_KEY = "nhl_settings_v2";
-const SETTINGS_FIELDS = [
-  "flash_duration","flash_interval","flash_quiet_window","flash_transition_ms",
-  "poll_live_seconds","poll_critical_seconds","poll_pregame_seconds","poll_error_seconds",
-  "request_timeout","max_retries","backoff_base","backoff_max",
-  "pregame_buffer_seconds","restore_transition_ms","goal_delay_seconds",
-];
+/* Settings that live in the sidebar, grouped by Apply-button section. */
+const SECTION_FIELDS = {
+  bulbs:   ["bulb-ips"],
+  teams:   ["primary_team", "primary_delay_seconds", "default_delay_seconds"],
+  flash:   ["flash_duration", "flash_interval", "flash_quiet_window", "flash_transition_ms"],
+  polling: ["poll_live_seconds", "poll_critical_seconds", "poll_pregame_seconds", "poll_error_seconds"],
+  network: ["request_timeout", "max_retries", "backoff_base", "backoff_max"],
+  timing:  ["pregame_buffer_seconds", "restore_transition_ms"],
+};
+/* Numeric fields sent to /api/start under the same names. */
+const NUMERIC_FIELDS = Object.entries(SECTION_FIELDS)
+  .filter(([s]) => s !== "bulbs").flatMap(([, f]) => f).filter(id => id !== "primary_team");
 
+const SETTINGS_KEY = "nhl_settings_v3";
+const THEME_KEY = "nhl_theme";
+
+const state = {
+  games: [],
+  selected: new Set(),     // checked game ids
+  manual: {},              // per-game delay overrides {id: seconds}
+  clocks: {},              // cached live-clock text {id: {text, cls}}
+  teams: {},               // {abbrev: {name, primary, secondary}}
+  monitoring: false,
+  firstLoad: true,
+};
+
+const statusPill = $("status-pill"), startBtn = $("start-btn"), stopBtn = $("stop-btn");
+const testBtn = $("test-btn"), bulbStatus = $("bulb-status"), bulbStatusTx = $("bulb-status-text");
+const logWrap = $("log-wrap"), autoscroll = $("autoscroll"), gameList = $("game-list");
+const simTeam = $("sim-team"), simResult = $("sim-result"), primarySel = $("primary_team");
+const sidebar = $("sidebar"), overlay = $("sidebar-overlay"), tooltip = $("global-tip");
+
+const num = (id, fallback) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : fallback; };
+const teamName = a => (state.teams[a] && state.teams[a].name) || a;
+
+/* ── Settings persistence ───────────────────────────────────────────────── */
 function saveSettings() {
   const obj = {};
-  SETTINGS_FIELDS.forEach(id => { const el = $(id); if (el) obj[id] = el.value; });
-  obj["bulb_ips"] = $("bulb-ips").value;
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(obj)); } catch(_) {}
+  Object.values(SECTION_FIELDS).flat().forEach(id => { obj[id] = $(id).value; });
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(obj)); } catch (_) {}
 }
-
 function loadSettings() {
-  let saved;
-  try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null"); } catch(_) { saved = null; }
-  if (!saved) return;
-  SETTINGS_FIELDS.forEach(id => { const el = $(id); if (el && saved[id] !== undefined) el.value = saved[id]; });
-  if (saved["bulb_ips"] !== undefined) $("bulb-ips").value = saved["bulb_ips"];
-}
-
-// ── Apply button system ───────────────────────────────────────────────────────
-const _dirtySections = new Set();
-
-function markSectionDirty(sectionName) {
-  _dirtySections.add(sectionName);
-  const dirty = $(`dirty-${sectionName}`);
-  if (dirty) dirty.classList.add("visible");
-  const applyBtn = document.querySelector(`[data-apply="${sectionName}"]`);
-  if (applyBtn) {
-    applyBtn.classList.add("has-changes");
-    applyBtn.classList.remove("applied");
-    applyBtn.textContent = "Apply";
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null"); } catch (_) {}
+  if (!saved) {                                   // migrate bulb IPs from the previous version
+    try {
+      const old = JSON.parse(localStorage.getItem("nhl_settings_v2") || "null");
+      if (old) saved = { ...old, "bulb-ips": old.bulb_ips };
+    } catch (_) {}
   }
-  // Mark individual fields as pending
-  const fields = SECTION_FIELDS[sectionName] || [];
-  fields.forEach(id => {
-    const el = $(id);
-    if (el) el.classList.add("pending");
+  if (!saved) return;
+  Object.values(SECTION_FIELDS).flat().forEach(id => {
+    if (saved[id] === undefined || saved[id] === null) return;
+    if (id === "primary_team" && !state.teams[saved[id]]) return;
+    $(id).value = saved[id];
   });
 }
 
-function applySection(sectionName) {
-  _dirtySections.delete(sectionName);
-  saveSettings();
-  const dirty = $(`dirty-${sectionName}`);
-  if (dirty) dirty.classList.remove("visible");
-  const applyBtn = document.querySelector(`[data-apply="${sectionName}"]`);
-  if (applyBtn) {
-    applyBtn.classList.remove("has-changes");
-    applyBtn.classList.add("applied");
-    applyBtn.textContent = "✓ Applied";
-    setTimeout(() => {
-      applyBtn.classList.remove("applied");
-      applyBtn.textContent = "Apply";
-    }, 1800);
-  }
-  // Clear pending marks
-  const fields = SECTION_FIELDS[sectionName] || [];
-  fields.forEach(id => { const el = $(id); if (el) el.classList.remove("pending"); });
+/* ── Apply-button system ────────────────────────────────────────────────── */
+function markSectionDirty(section) {
+  const dot = $(`dirty-${section}`); if (dot) dot.classList.add("visible");
+  const btn = document.querySelector(`[data-apply="${section}"]`);
+  if (btn) { btn.classList.add("has-changes"); btn.classList.remove("applied"); btn.textContent = "Apply"; }
+  SECTION_FIELDS[section].forEach(id => $(id).classList.add("pending"));
 }
+function applySection(section, quiet = false) {
+  saveSettings();
+  const dot = $(`dirty-${section}`); if (dot) dot.classList.remove("visible");
+  const btn = document.querySelector(`[data-apply="${section}"]`);
+  if (btn) {
+    btn.classList.remove("has-changes");
+    if (!quiet) {
+      btn.classList.add("applied"); btn.textContent = "✓ Applied";
+      setTimeout(() => { btn.classList.remove("applied"); btn.textContent = "Apply"; }, 1800);
+    }
+  }
+  SECTION_FIELDS[section].forEach(id => $(id).classList.remove("pending"));
+  if (section === "teams") renderGames();         // delays / ordering depend on these
+}
+function applyAll() { Object.keys(SECTION_FIELDS).forEach(s => applySection(s, true)); }
 
-function attachSettingsSave() {
-  // Attach dirty marking per section instead of immediate save
-  Object.entries(SECTION_FIELDS).forEach(([section, fields]) => {
-    fields.forEach(id => {
+function attachSettingsHandlers() {
+  Object.entries(SECTION_FIELDS).forEach(([section, ids]) => {
+    ids.forEach(id => {
       const el = $(id);
-      if (!el) return;
-      el.addEventListener("change", () => markSectionDirty(section));
       el.addEventListener("input", () => markSectionDirty(section));
+      el.addEventListener("change", () => markSectionDirty(section));
     });
   });
-  // Bulb textarea
-  $("bulb-ips").addEventListener("input", () => markSectionDirty("bulbs"));
-
-  // Wire up Apply buttons
-  document.querySelectorAll("[data-apply]").forEach(btn => {
-    btn.addEventListener("click", () => applySection(btn.dataset.apply));
-  });
+  document.querySelectorAll("[data-apply]").forEach(b => b.addEventListener("click", () => applySection(b.dataset.apply)));
 }
 
-// ── Mobile drawer ──
-function openDrawer() { sidebar.classList.add("open"); overlay.classList.add("open"); }
-function closeDrawer() { sidebar.classList.remove("open"); overlay.classList.remove("open"); }
-menuBtn.addEventListener("click", () => sidebar.classList.contains("open") ? closeDrawer() : openDrawer());
+/* ── Drawer / tooltip / theme ───────────────────────────────────────────── */
+const openDrawer = () => { sidebar.classList.add("open"); overlay.classList.add("open"); };
+const closeDrawer = () => { sidebar.classList.remove("open"); overlay.classList.remove("open"); };
+$("menu-btn").addEventListener("click", () => sidebar.classList.contains("open") ? closeDrawer() : openDrawer());
 overlay.addEventListener("click", closeDrawer);
 
-// ── Tooltip ──
-function attachTooltip(el) {
+document.querySelectorAll(".tip").forEach(el => {
   el.addEventListener("mouseenter", () => {
     tooltip.textContent = el.dataset.tip || "";
     const r = el.getBoundingClientRect();
-    const spaceRight = window.innerWidth - r.right;
-    if (spaceRight > 212) {
-      tooltip.style.top = (r.top + r.height / 2 - 10) + "px";
-      tooltip.style.left = (r.right + 8) + "px";
+    if (window.innerWidth - r.right > 212) {
+      tooltip.style.top = (r.top + r.height / 2 - 10) + "px"; tooltip.style.left = (r.right + 8) + "px";
     } else {
-      tooltip.style.top = (r.bottom + 6) + "px";
-      tooltip.style.left = Math.max(8, r.left - 40) + "px";
+      tooltip.style.top = (r.bottom + 6) + "px"; tooltip.style.left = Math.max(8, r.left - 40) + "px";
     }
     tooltip.style.opacity = "1";
   });
   el.addEventListener("mouseleave", () => { tooltip.style.opacity = "0"; });
-}
-document.querySelectorAll(".tip").forEach(attachTooltip);
-
-// ── Theme ──
-themeBtn.addEventListener("click", () => {
-  const html = document.documentElement;
-  const dark = html.getAttribute("data-theme") === "dark";
-  html.setAttribute("data-theme", dark ? "light" : "dark");
-  themeBtn.textContent = dark ? "☀️" : "🌙";
 });
 
-// ── Log ──
-let _logLineCount = 0;
-
-function updateLogCount() {
-  const el = $("log-count");
-  if (el) el.textContent = _logLineCount > 0 ? `${_logLineCount} lines` : "";
+function setTheme(t) {
+  document.documentElement.setAttribute("data-theme", t);
+  $("theme-btn").textContent = t === "dark" ? "🌙" : "☀️";
+  try { localStorage.setItem(THEME_KEY, t); } catch (_) {}
 }
+$("theme-btn").addEventListener("click", () =>
+  setTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark"));
 
+/* ── Log ────────────────────────────────────────────────────────────────── */
+let _logLines = 0;
+function updateLogCount() { $("log-count").textContent = _logLines ? `${_logLines} lines` : ""; }
+
+function classifyLine(line) {
+  const u = line.toUpperCase();
+  if (line.startsWith("──")) return "done";
+  if (u.includes("GOAL")) return "goal";
+  if (u.includes("ERROR") || u.includes("EXCEPTION") || u.includes("TRACEBACK")) return "error";
+  return "";
+}
 function appendLog(text, cls = "") {
   const div = document.createElement("div");
   div.className = "log-line" + (cls ? " " + cls : "");
   div.textContent = text;
   logWrap.appendChild(div);
-  _logLineCount++;
+  if (++_logLines > MAX_LOG_LINES) { logWrap.removeChild(logWrap.firstChild); _logLines--; }
   updateLogCount();
   if (autoscroll.checked) logWrap.scrollTop = logWrap.scrollHeight;
 }
 
-function classifyLine(line) {
-  const u = line.toUpperCase();
-  if (u.includes("GOAL")) return "goal";
-  if (u.includes("ERROR") || u.includes("EXCEPTION") || u.includes("TRACEBACK")) return "error";
-  if (line.trim() === "[DONE]") return "done";
-  return "";
+let _es = null;
+function connectLog(since) {
+  if (_es) _es.close();
+  _es = new EventSource(`/api/log?since=${since}`);     // auto-resumes via Last-Event-ID
+  _es.onmessage = e => appendLog(e.data, classifyLine(e.data));
 }
-
-async function loadLogHistory() {
+async function initLog() {
+  let last = 0;
   try {
-    const r = await fetch("/api/log-history");
-    const d = await r.json();
-    if (d.entries && d.entries.length > 0) {
-      d.entries.forEach(line => appendLog(line, classifyLine(line) || "history"));
-      appendLog(`─── ${d.entries.length} previous log entries loaded ───`, "done");
-    }
-  } catch(_) {}
+    const d = await (await fetch("/api/log-history")).json();
+    (d.entries || []).forEach(l => appendLog(l, classifyLine(l) || "history"));
+    if (d.entries && d.entries.length) appendLog(`── ${d.entries.length} previous log entries loaded ──`, "done");
+    last = d.last || 0;
+  } catch (_) {}
+  connectLog(last);
 }
-
-clearLogBtn.addEventListener("click", async () => {
-  logWrap.innerHTML = "";
-  _logLineCount = 0;
-  updateLogCount();
-  try { await fetch("/api/clear-log", { method: "POST" }); } catch(_) {}
+$("clear-log-btn").addEventListener("click", async () => {
+  logWrap.innerHTML = ""; _logLines = 0; updateLogCount();
+  try { await fetch("/api/clear-log", { method: "POST" }); } catch (_) {}
 });
 
-// ── Bulb helpers ──
-function getBulbIps() {
-  return $("bulb-ips").value.split("\n").map(s => s.trim()).filter(Boolean);
-}
-function setBulbStatus(state, text) {
-  bulbStatus.className = "bulb-status " + state;
-  bulbStatusTx.textContent = text;
-}
+/* ── Bulbs ──────────────────────────────────────────────────────────────── */
+const getBulbIps = () => [...new Set($("bulb-ips").value.split(/[\s,;]+/).map(s => s.trim()).filter(Boolean))];
+function setBulbStatus(cls, text) { bulbStatus.className = "bulb-status " + cls; bulbStatusTx.textContent = text; }
 
-// ── Colors / swatches ──
+testBtn.addEventListener("click", async () => {
+  const ips = getBulbIps();
+  if (!ips.length) { setBulbStatus("disconnected", "Enter at least one IP"); return; }
+  testBtn.disabled = true; setBulbStatus("", "Testing…");
+  const results = await Promise.all(ips.map(ip =>
+    fetch(`/api/test-bulb?ip=${encodeURIComponent(ip)}`).then(r => r.json())
+      .catch(e => ({ ok: false, error: e.message }))));
+  const ok = results.filter(r => r.ok);
+  if (ok.length === ips.length) setBulbStatus("connected", `${ok.length}/${ips.length} connected · ${[...new Set(ok.map(r => r.model))].join(", ")}`);
+  else setBulbStatus("disconnected", `${ok.length}/${ips.length} connected · ${(results.find(r => !r.ok) || {}).error || "failed"}`);
+  testBtn.disabled = false;
+});
+
+/* ── Teams / colours ────────────────────────────────────────────────────── */
 function hsvToHex(h, s, v) {
   s /= 100; v /= 100;
-  const f = n => { const k = (n + h/60) % 6; return v - v*s*Math.max(0, Math.min(k, 4-k, 1)); };
-  const x = n => Math.round(f(n)*255).toString(16).padStart(2,"0");
+  const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
+  const x = n => Math.round(f(n) * 255).toString(16).padStart(2, "0");
   return `#${x(5)}${x(3)}${x(1)}`;
 }
-function makeSwatch(hsv) {
-  const [h,s,v] = hsv;
+function makeSwatch([h, s, v]) {
   const el = document.createElement("div");
   el.className = "swatch";
   el.style.background = (v === 0 && s === 0) ? "#111" : hsvToHex(h, s, v);
   return el;
 }
-async function loadTeamColors() {
-  try {
-    const r = await fetch("/api/team-colors");
-    if (!r.ok) return;
-    _teamColors = await r.json();
-    Object.keys(_teamColors).sort().forEach(abbrev => {
-      const opt = document.createElement("option");
-      opt.value = abbrev;
-      opt.textContent = TEAM_NAMES[abbrev] ? `${TEAM_NAMES[abbrev]} (${abbrev})` : abbrev;
-      simTeam.appendChild(opt);
-    });
-    refreshSwatches();
-  } catch (_) {}
-}
-function refreshSwatches() {
-  gameList.querySelectorAll(".team-swatches[data-away][data-home]").forEach(sc => {
-    const away = sc.dataset.away, home = sc.dataset.home;
-    sc.innerHTML = "";
-    const ac = _teamColors[away], hc = _teamColors[home];
-    if (ac) { sc.appendChild(makeSwatch(ac.primary)); sc.appendChild(makeSwatch(ac.secondary)); }
-    if (ac && hc) { const sep = document.createElement("div"); sep.className = "swatch-sep"; sc.appendChild(sep); }
-    if (hc) { sc.appendChild(makeSwatch(hc.primary)); sc.appendChild(makeSwatch(hc.secondary)); }
+async function loadTeams() {
+  try { state.teams = await (await fetch("/api/team-colors")).json(); } catch (_) { state.teams = {}; }
+  const abbrevs = Object.keys(state.teams).sort((a, b) => teamName(a).localeCompare(teamName(b)));
+  abbrevs.forEach(a => {
+    const label = `${teamName(a)} (${a})`;
+    [primarySel, simTeam].forEach(sel => { const o = document.createElement("option"); o.value = a; o.textContent = label; sel.appendChild(o); });
   });
+  if (state.teams[DEFAULT_PRIMARY]) primarySel.value = DEFAULT_PRIMARY;
 }
 
-// ── Live game clock (refreshes every 30s from NHL API) ───────────────────────
-async function refreshLiveGameClocks() {
-  if (_liveGameIds.size === 0) return;
-  for (const gid of _liveGameIds) {
-    try {
-      const r = await fetch(`/api/game-state/${gid}`);
-      const d = await r.json();
-      if (!d.ok) continue;
-      const clockEl = $(`clock-${gid}`);
-      if (!clockEl) continue;
-      const isLive = d.state === "LIVE" || d.state === "CRIT";
-      if (!isLive) {
-        // Game ended or not started — hide clock
-        clockEl.classList.remove("visible", "intermission");
-        continue;
-      }
-      clockEl.classList.add("visible");
-      if (d.in_intermission) {
-        clockEl.classList.add("intermission");
-        const pType = d.period_type === "OT" ? "OT" : `P${d.period}`;
-        clockEl.textContent = `${pType} INT`;
-      } else {
-        clockEl.classList.remove("intermission");
-        const pType = d.period_type === "OT" ? "OT" : `P${d.period}`;
-        const clock = d.clock || "--:--";
-        clockEl.textContent = `${pType} ${clock} · ${d.away_score}–${d.home_score}`;
-      }
-    } catch(_) {}
-  }
+/* ── Games ──────────────────────────────────────────────────────────────── */
+const isPrimaryGame = g => g.away_abbrev === primarySel.value || g.home_abbrev === primarySel.value;
+const defaultDelayFor = g => isPrimaryGame(g) ? num("primary_delay_seconds", 35) : num("default_delay_seconds", 45);
+const delayFor = g => (g.id in state.manual) ? state.manual[g.id] : defaultDelayFor(g);
+const isLive = s => s === "LIVE" || s === "CRIT";
+const isFinal = s => s === "FINAL" || s === "OFF";
+const fmtTime = iso => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+function updateGamesHint() {
+  const p = primarySel.value;
+  $("games-hint").textContent =
+    `★ ${teamName(p)} games use ${num("primary_delay_seconds", 35)}s · all other games ${num("default_delay_seconds", 45)}s. ` +
+    `Edit a delay to override it for that game (highlighted).`;
 }
 
-function startClockTimer() {
-  clearInterval(_gameClockTimer);
-  _gameClockTimer = setInterval(refreshLiveGameClocks, 30000);
-}
-
-// ── Games ──
-function badgeClass(state) {
-  if (state === "LIVE" || state === "CRIT") return "live";
-  if (state === "FINAL" || state === "OFF") return "final";
-  return "fut";
-}
-function badgeText(state) {
-  if (state === "LIVE" || state === "CRIT") return "LIVE";
-  if (state === "FINAL" || state === "OFF") return "FINAL";
-  return "SOON";
-}
-function getGameDelays() {
-  const map = {};
-  gameList.querySelectorAll(".game-delay-input").forEach(inp => { map[inp.dataset.gameId] = parseFloat(inp.value) || 0; });
-  return map;
-}
-
-// ── Calibration popover (auto-detects period from NHL API) ───────────────────
-let _openPopover = null;
-let _clockPollTimer = null;
-
-function closeAllPopovers() {
-  if (_openPopover) { _openPopover.classList.remove("open"); _openPopover = null; }
-  if (_clockPollTimer) { clearInterval(_clockPollTimer); _clockPollTimer = null; }
-}
-
-document.addEventListener("click", e => {
-  if (_openPopover && !_openPopover.closest(".cal-wrap").contains(e.target)) closeAllPopovers();
-});
-
-function buildCalPopover(gameId, delayInput) {
-  const wrap = document.createElement("div");
-  wrap.className = "cal-wrap";
-
-  const btn = document.createElement("button");
-  btn.className = "btn btn-xs";
-  btn.title = "Auto-detect TV delay from game clock";
-  btn.textContent = "⏱ Cal";
-
-  const pop = document.createElement("div");
-  pop.className = "cal-popover";
-
-  // Auto-detect status bar
-  const autoStatus = document.createElement("div");
-  autoStatus.className = "cal-autodetect";
-  autoStatus.textContent = "⏳ Fetching game state…";
-
-  // Goal tap section
-  const tapSection = document.createElement('div');
-  tapSection.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
-
-  const tapInstructions = document.createElement('div');
-  tapInstructions.style.cssText = 'font-size:10px;color:var(--muted);line-height:1.6;';
-  tapInstructions.innerHTML = 'Wait for a goal.<br>The instant you <b>see it on your TV</b>, tap:';
-
-  const tapBtn = document.createElement('button');
-  tapBtn.className = 'btn btn-primary';
-  tapBtn.style.cssText = 'width:100%;justify-content:center;font-size:13px;padding:8px;';
-  tapBtn.textContent = '🚨 I just saw a GOAL on TV';
-
-  const tapResult = document.createElement('div');
-  tapResult.className = 'cal-result';
-
-  let pendingGoalUtc = null;
-
-  // Pre-fetch the last goal UTC so we're ready when user taps
-  async function prefetchGoal() {
-    try {
-      const r = await fetch(`/api/last-goal-time?game_id=${gameId}`);
-      const d = await r.json();
-      if (d.ok) {
-        pendingGoalUtc = d.goal_est_utc;
-        tapInstructions.innerHTML = `Last goal: P${d.goal_period} ${d.goal_time}<br>When you <b>see it on TV</b>, tap:`;
-      } else {
-        tapInstructions.innerHTML = `No goals yet — wait for one,<br>then tap the instant you see it:`;
-      }
-    } catch(e) {}
-  }
-
-  tapBtn.addEventListener('click', async e => {
-    e.stopPropagation();
-    if (!pendingGoalUtc) {
-      tapResult.className = 'cal-result err';
-      tapResult.textContent = 'No goal data yet — wait for a goal first.';
-      return;
-    }
-    tapBtn.disabled = true;
-    try {
-      const r = await fetch('/api/calibrate-tap', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ game_id: gameId, goal_est_utc: pendingGoalUtc })
-      });
-      const d = await r.json();
-      if (d.ok) {
-        delayInput.value = d.delay_seconds;
-        delayInput.classList.remove('pending');
-        saveSettings();
-        tapResult.className = 'cal-result ok';
-        tapResult.textContent = `${d.delay_seconds}s delay set ✓`;
-        const applyBtn = delayInput.closest('.game-delay-wrap')
-          ?.parentElement?.querySelector('.delay-apply-btn');
-        if (applyBtn) applyBtn.click();
-        // Refresh for next goal
-        pendingGoalUtc = null;
-        setTimeout(() => { prefetchGoal(); tapBtn.disabled = false; }, 2000);
-        setTimeout(closeAllPopovers, 2500);
-      } else {
-        tapResult.className = 'cal-result err';
-        tapResult.textContent = d.error;
-        tapBtn.disabled = false;
-      }
-    } catch(err) {
-      tapResult.className = 'cal-result err';
-      tapResult.textContent = err.message;
-      tapBtn.disabled = false;
-    }
-  });
-
-  tapSection.append(tapInstructions, tapBtn, tapResult);
-
-  pop.append(autoStatus, tapSection);
-  prefetchGoal();
-
-  // Auto-detect game state when popover opens
-  async function autoDetectGameState() {
-    autoStatus.className = "cal-autodetect";
-    autoStatus.textContent = "⏳ Fetching game state…";
-    try {
-      const r = await fetch(`/api/game-state/${gameId}`);
-      const d = await r.json();
-      if (!d.ok) throw new Error(d.error || "API error");
-
-      const isLive = d.state === "LIVE" || d.state === "CRIT";
-      if (!isLive) {
-        autoStatus.className = "cal-autodetect";
-        autoStatus.textContent = `ℹ Game not live (${d.state})`;
-        return;
-      }
-
-      const pLabel = d.period_type === "OT" ? "OT" : `P${d.period}`;
-      const clockStr = d.clock || "--:--";
-      const intermMsg = d.in_intermission ? " (intermission)" : "";
-      autoStatus.className = "cal-autodetect live";
-      autoStatus.textContent = `✓ ${pLabel} · ${clockStr}${intermMsg} — NHL API`;
-    } catch(err) {
-      autoStatus.className = "cal-autodetect err";
-      autoStatus.textContent = `✗ ${err.message}`;
-    }
-  }
-
-  btn.addEventListener("click", e => {
-    e.stopPropagation();
-    if (pop.classList.contains("open")) {
-      closeAllPopovers();
-    } else {
-      closeAllPopovers();
-      const r = btn.getBoundingClientRect();
-      const popWidth = 230;
-      let left = r.right - popWidth;
-      if (left < 8) left = 8;
-      let top = r.bottom + 6;
-      if (top + 300 > window.innerHeight) top = r.top - 6 - Math.min(300, window.innerHeight * 0.8);
-      if (top < 8) top = 8;
-      pop.style.top = top + 'px';
-      pop.style.left = left + 'px';
-      pop.classList.add("open");
-      _openPopover = pop;
-      autoDetectGameState();
-      prefetchGoal();
-    }
-  });
-
-  wrap.append(btn, pop);
-  return wrap;
-}
-
-function renderGames(games) {
+function renderGames() {
   gameList.innerHTML = "";
-  _liveGameIds.clear();
+  updateGamesHint();
+  if (!state.games.length) { gameList.innerHTML = '<li class="games-empty">No games scheduled today.</li>'; return; }
 
-  if (!games || games.length === 0) {
-    gameList.innerHTML = '<li class="games-empty">No games scheduled today.</li>';
-    return;
-  }
+  const sorted = [...state.games].sort((a, b) =>
+    (isPrimaryGame(b) - isPrimaryGame(a)) || a.start_time_utc.localeCompare(b.start_time_utc));
 
-  const defaultDelay = parseFloat($("goal_delay_seconds").value) || 35;
-
-  games.forEach(g => {
+  sorted.forEach(g => {
     const li = document.createElement("li");
-    li.className = "game-row";
+    li.className = "game-row" + (isPrimaryGame(g) ? " primary" : "");
 
     const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.dataset.gameId = g.id;
+    cb.type = "checkbox"; cb.dataset.gameId = g.id; cb.checked = state.selected.has(g.id);
+    cb.addEventListener("change", () => { cb.checked ? state.selected.add(g.id) : state.selected.delete(g.id); });
 
     const matchup = document.createElement("span");
     matchup.className = "game-matchup";
     matchup.textContent = `${g.away_abbrev} @ ${g.home_abbrev}`;
     matchup.title = `${g.away_name} at ${g.home_name}`;
-    matchup.addEventListener("click", () => { cb.checked = !cb.checked; });
-
-    const time = document.createElement("span");
-    time.className = "game-time";
-    time.textContent = g.start_time_local;
-
-    const badge = document.createElement("span");
-    badge.className = "game-badge " + badgeClass(g.game_state);
-    badge.textContent = badgeText(g.game_state);
-
-    // Live clock display (refreshed every 30s)
-    const clockEl = document.createElement("span");
-    clockEl.className = "game-clock";
-    clockEl.id = `clock-${g.id}`;
+    matchup.addEventListener("click", () => { if (!cb.disabled) { cb.checked = !cb.checked; cb.dispatchEvent(new Event("change")); } });
 
     const swatches = document.createElement("div");
     swatches.className = "team-swatches";
-    swatches.dataset.away = g.away_abbrev;
-    swatches.dataset.home = g.home_abbrev;
+    const ac = state.teams[g.away_abbrev], hc = state.teams[g.home_abbrev];
+    if (ac) { swatches.append(makeSwatch(ac.primary), makeSwatch(ac.secondary)); }
+    if (ac && hc) { const sep = document.createElement("div"); sep.className = "swatch-sep"; swatches.appendChild(sep); }
+    if (hc) { swatches.append(makeSwatch(hc.primary), makeSwatch(hc.secondary)); }
 
-    // Delay input with Apply button
-    const delayWrap = document.createElement("div");
-    delayWrap.className = "game-delay-wrap";
-    const delayLabel = document.createElement("label");
-    delayLabel.textContent = "delay";
-    const delayInput = document.createElement("input");
-    delayInput.className = "game-delay-input";
-    delayInput.type = "number";
-    delayInput.min = 0; delayInput.step = 1;
-    delayInput.dataset.gameId = g.id;
-    delayInput.value = defaultDelay;
+    const time = document.createElement("span");
+    time.className = "game-time"; time.textContent = fmtTime(g.start_time_utc);
 
-    const delayApply = document.createElement("button");
-    delayApply.className = "delay-apply-btn";
-    delayApply.title = "Apply this delay value";
-    delayApply.textContent = "Apply";
+    const badge = document.createElement("span");
+    badge.className = "game-badge" + (isLive(g.game_state) ? " live" : "");
+    badge.textContent = isLive(g.game_state) ? "LIVE" : isFinal(g.game_state) ? "FINAL" : "SOON";
 
-    delayInput.addEventListener("change", () => {
-      delayInput.classList.add("pending");
-      delayApply.classList.add("visible");
-      delayApply.classList.remove("applied");
-      delayApply.textContent = "Apply";
+    const clock = document.createElement("span");
+    clock.className = "game-clock"; clock.id = `clock-${g.id}`;
+    const c = state.clocks[g.id];
+    if (c && isLive(g.game_state)) { clock.textContent = c.text; clock.className = "game-clock visible " + c.cls; }
+
+    const wrap = document.createElement("div");
+    wrap.className = "game-delay-wrap";
+    const inp = document.createElement("input");
+    inp.type = "number"; inp.min = "0"; inp.step = "1"; inp.className = "game-delay-input";
+    inp.dataset.gameId = g.id; inp.value = delayFor(g);
+    inp.title = (g.id in state.manual) ? "Custom delay for this game" : "Default delay for this game";
+    inp.classList.toggle("manual", g.id in state.manual);
+    inp.addEventListener("input", () => {
+      const v = parseFloat(inp.value);
+      if (Number.isFinite(v) && v >= 0) state.manual[g.id] = v; else delete state.manual[g.id];
+      inp.classList.toggle("manual", g.id in state.manual);
     });
+    wrap.append(inp, document.createTextNode("s"));
 
-    delayApply.addEventListener("click", async () => {
-      delayInput.classList.remove("pending");
-      delayApply.classList.add("applied");
-      delayApply.textContent = "✓";
-      saveSettings();
-      // If monitoring is active, restart with the new delay applied
-      try {
-        const st = await fetch("/api/status").then(r => r.json());
-        if (st.state === "monitoring") {
-          await fetch("/api/stop", { method: "POST" });
-          if (_es) { _es.close(); _es = null; }
-          await new Promise(r => setTimeout(r, 400));
-          await startMonitoring();
-        }
-      } catch(_) {}
-      setTimeout(() => {
-        delayApply.classList.remove("applied", "visible");
-        delayApply.textContent = "Apply";
-      }, 1500);
-    });
-
-    delayWrap.append(delayLabel, delayInput, delayApply);
-
-    const calWrap = buildCalPopover(g.id, delayInput);
-
-    li.append(cb, matchup, time, badge, clockEl, swatches, delayWrap, calWrap);
+    li.append(cb);
+    if (isPrimaryGame(g)) { const s = document.createElement("span"); s.className = "game-star"; s.textContent = "★"; s.title = "Primary team"; li.append(s); }
+    li.append(matchup, swatches, time, badge, clock, wrap);
     gameList.appendChild(li);
-
-    // Auto-select all games; track live ones for clock updates
-    cb.checked = true;
-    const isLive = g.game_state === "LIVE" || g.game_state === "CRIT";
-    if (isLive) {
-      _liveGameIds.add(String(g.id));
-    }
   });
-
-  refreshSwatches();
-
-  // Fetch initial clock state for live games right away
-  if (_liveGameIds.size > 0) {
-    refreshLiveGameClocks();
-    startClockTimer();
-  }
+  applyMonitoringLock();
 }
 
-async function loadGames() {
-  gameList.innerHTML = '<li class="games-empty">Loading games…</li>';
+async function loadGames(force = false) {
   try {
-    const r = await fetch("/api/games");
-    const data = await r.json();
-    if (data.error) throw new Error(data.error);
-    renderGames(data);
-  } catch(e) {
-    gameList.innerHTML = `<li class="games-empty">Error: ${e.message}</li>`;
+    const r = await fetch("/api/games" + (force ? "?refresh=1" : ""));
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    state.games = d;
+    if (state.firstLoad) {                     // pre-tick primary-team games on first load
+      state.games.forEach(g => { if (isPrimaryGame(g) && !isFinal(g.game_state)) state.selected.add(g.id); });
+      state.firstLoad = false;
+    }
+    renderGames();
+    refreshLiveClocks();
+  } catch (e) {
+    gameList.innerHTML = "";
+    const li = document.createElement("li"); li.className = "games-empty";
+    li.textContent = `Could not load games: ${e.message}`; gameList.appendChild(li);
   }
 }
 
-// ── Test bulb ──
-testBtn.addEventListener("click", async () => {
-  const ips = getBulbIps();
-  if (!ips.length) { setBulbStatus("disconnected", "Enter at least one IP"); return; }
-  testBtn.disabled = true;
-  setBulbStatus("", "Testing…");
-  let ok = 0, fail = 0;
-  for (const ip of ips) {
+async function refreshLiveClocks() {
+  const live = state.games.filter(g => isLive(g.game_state));
+  await Promise.all(live.map(async g => {
     try {
-      const r = await fetch(`/api/test-bulb?ip=${encodeURIComponent(ip)}`);
-      const d = await r.json();
-      d.ok ? ok++ : fail++;
-    } catch(_) { fail++; }
-  }
-  testBtn.disabled = false;
-  if (fail === 0) setBulbStatus("connected", `${ok} bulb${ok>1?"s":""} connected`);
-  else if (ok === 0) setBulbStatus("disconnected", "No bulbs reachable");
-  else setBulbStatus("", `${ok} ok, ${fail} failed`);
+      const d = await (await fetch(`/api/game-state/${g.id}`)).json();
+      const el = $(`clock-${g.id}`);
+      if (!d.ok || !el) return;
+      if (d.state !== "LIVE" && d.state !== "CRIT") { el.className = "game-clock"; delete state.clocks[g.id]; return; }
+      const p = d.period_type === "OT" ? "OT" : d.period_type === "SO" ? "SO" : `P${d.period}`;
+      const inter = d.in_intermission;
+      const text = inter ? `${p} INT · ${d.away_score}–${d.home_score}` : `${p} ${d.clock || "--:--"} · ${d.away_score}–${d.home_score}`;
+      const cls = inter ? "intermission" : "";
+      state.clocks[g.id] = { text, cls };
+      el.textContent = text; el.className = "game-clock visible " + cls;
+    } catch (_) {}
+  }));
+}
+
+$("select-all-btn").addEventListener("click", () => {
+  state.games.forEach(g => state.selected.add(g.id));
+  gameList.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true);
 });
+$("deselect-all-btn").addEventListener("click", () => {
+  state.selected.clear();
+  gameList.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
+});
+$("reset-delays-btn").addEventListener("click", () => { state.manual = {}; renderGames(); });
+$("refresh-games-btn").addEventListener("click", () => loadGames(true));
 
-// ── Start / Stop ──
-async function startMonitoring() {
+/* ── Monitoring state ───────────────────────────────────────────────────── */
+function applyMonitoringLock() {
+  const on = state.monitoring;
+  gameList.querySelectorAll("input").forEach(i => i.disabled = on);
+  ["select-all-btn", "deselect-all-btn", "reset-delays-btn"].forEach(id => $(id).disabled = on);
+}
+function setMonitoring(on) {
+  state.monitoring = on;
+  statusPill.textContent = on ? "Monitoring" : "Idle";
+  statusPill.classList.toggle("monitoring", on);
+  startBtn.disabled = on; stopBtn.disabled = !on;
+  $("run-hint").style.display = on ? "" : "none";
+  applyMonitoringLock();
+}
+async function pollStatus() {
+  try { const d = await (await fetch("/api/status")).json(); setMonitoring(d.state === "monitoring"); } catch (_) {}
+}
+
+startBtn.addEventListener("click", async () => {
+  applyAll();
   const ips = getBulbIps();
-  if (!ips.length) { alert("Enter at least one bulb IP in the sidebar."); return false; }
+  if (!ips.length) { appendLog("ERROR: enter at least one bulb IP address first.", "error"); openDrawer(); return; }
 
-  const selectedGames = [...gameList.querySelectorAll('input[type="checkbox"]:checked')]
-    .map(cb => cb.dataset.gameId);
-  if (!selectedGames.length) { alert("Select at least one game."); return false; }
+  const ids = state.games.filter(g => state.selected.has(g.id)).map(g => g.id);
+  if (!ids.length) { appendLog("ERROR: select at least one game first.", "error"); return; }
 
-  const delays = getGameDelays();
-  const defaultDelay = parseFloat($("goal_delay_seconds").value) || 35;
-  const perGameDelays = selectedGames.map(id => delays[id] ?? defaultDelay);
+  const game_delays = {};
+  state.games.forEach(g => { if (state.selected.has(g.id)) game_delays[g.id] = delayFor(g); });
 
-  saveSettings();
-
-  const body = {
-    bulb_ip: ips.join("\n"),
-    game_ids: selectedGames,
-    per_game_delays: perGameDelays,
-    flash_duration: parseFloat($("flash_duration").value),
-    flash_interval: parseFloat($("flash_interval").value),
-    flash_quiet_window: parseFloat($("flash_quiet_window").value),
-    flash_transition_ms: parseInt($("flash_transition_ms").value),
-    poll_live_seconds: parseFloat($("poll_live_seconds").value),
-    poll_critical_seconds: parseFloat($("poll_critical_seconds").value),
-    poll_pregame_seconds: parseFloat($("poll_pregame_seconds").value),
-    poll_error_seconds: parseFloat($("poll_error_seconds").value),
-    request_timeout: parseFloat($("request_timeout").value),
-    max_retries: parseInt($("max_retries").value),
-    backoff_base: parseFloat($("backoff_base").value),
-    backoff_max: parseFloat($("backoff_max").value),
-    pregame_buffer_seconds: parseFloat($("pregame_buffer_seconds").value),
-    restore_transition_ms: parseInt($("restore_transition_ms").value),
-    goal_delay_seconds: defaultDelay,
-  };
+  const body = { bulb_ips: ips, game_ids: ids, game_delays, primary_team: primarySel.value };
+  NUMERIC_FIELDS.forEach(id => { body[id] = $(id).value; });
 
   startBtn.disabled = true;
   try {
-    const r = await fetch("/api/start", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const r = await fetch("/api/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     const d = await r.json();
-    if (d.error) { alert(d.error); startBtn.disabled = false; return false; }
-    stopBtn.disabled = false;
-    connectLog();
-    return true;
-  } catch(e) {
-    alert(e.message);
-    startBtn.disabled = false;
-    return false;
-  }
-}
-
-startBtn.addEventListener("click", startMonitoring);
+    if (!r.ok) appendLog(`ERROR: ${d.error || r.status}`, "error");
+  } catch (e) { appendLog(`ERROR: ${e.message}`, "error"); }
+  pollStatus();
+});
 
 stopBtn.addEventListener("click", async () => {
   stopBtn.disabled = true;
-  try { await fetch("/api/stop", { method: "POST" }); } catch(_) {}
-  if (_es) { _es.close(); _es = null; }
-  startBtn.disabled = false;
-  stopBtn.disabled = true;
-});
-
-// ── Simulate goal ──
-simBtn.addEventListener("click", async () => {
-  const team = simTeam.value;
-  if (!team) { simResult.textContent = "Pick a team first."; simResult.className = "simulate-result err"; return; }
-  const ips = getBulbIps();
-  if (!ips.length) { simResult.textContent = "Enter a bulb IP first."; simResult.className = "simulate-result err"; return; }
-  simBtn.disabled = true;
-  simResult.className = "simulate-result";
-  simResult.textContent = "Firing…";
-  try {
-    const params = new URLSearchParams({
-      ip: ips[0], team,
-      flash_duration: $("flash_duration").value,
-      flash_interval: $("flash_interval").value,
-      flash_transition_ms: $("flash_transition_ms").value,
-    });
-    const r = await fetch(`/api/simulate-goal?${params}`);
-    const d = await r.json();
-    if (d.ok) {
-      simResult.className = "simulate-result ok";
-      simResult.textContent = `✓ Flashed ${TEAM_NAMES[team] || team}`;
-    } else {
-      simResult.className = "simulate-result err";
-      simResult.textContent = `✗ ${d.error}`;
-    }
-  } catch(e) {
-    simResult.className = "simulate-result err";
-    simResult.textContent = `✗ ${e.message}`;
-  } finally {
-    simBtn.disabled = false;
-  }
-});
-
-// ── Status polling ──
-function pollStatus() {
-  clearTimeout(_statusTimer);
-  fetch("/api/status").then(r => r.json()).then(d => {
-    const monitoring = d.state === "monitoring";
-    statusPill.textContent = monitoring ? "Monitoring" : "Idle";
-    statusPill.className = "status-pill" + (monitoring ? " monitoring" : "");
-    startBtn.disabled = monitoring;
-    stopBtn.disabled = !monitoring;
-    if (monitoring && !_es) connectLog();
-  }).catch(() => {}).finally(() => {
-    _statusTimer = setTimeout(pollStatus, 3000);
-  });
-}
-
-// ── SSE log stream ──
-function connectLog() {
-  if (_es) { _es.close(); }
-  _es = new EventSource("/api/log");
-  _es.onmessage = e => {
-    const line = e.data;
-    if (line === "[DONE]") {
-      appendLog("— monitoring ended —", "done");
-      _es.close(); _es = null;
-      return;
-    }
-    appendLog(line, classifyLine(line));
-  };
-  _es.onerror = () => {
-    // EventSource will auto-reconnect
-  };
-}
-
-// ── Game panel actions ──
-refreshBtn.addEventListener("click", loadGames);
-selectAll.addEventListener("click", () =>
-  gameList.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = true));
-deselectAll.addEventListener("click", () =>
-  gameList.querySelectorAll('input[type="checkbox"]').forEach(cb => cb.checked = false));
-
-// ── Init ──
-async function init() {
-  loadSettings();
-  attachSettingsSave();
-  await loadTeamColors();
-  await loadGames();
-  await loadLogHistory();
+  try { await fetch("/api/stop", { method: "POST" }); } catch (_) {}
   pollStatus();
-  // Auto-start monitoring if a bulb IP is configured and not already monitoring
-  const ips = getBulbIps();
-  if (ips.length) {
-    try {
-      const st = await fetch("/api/status").then(r => r.json());
-      if (st.state !== "monitoring") {
-        await startMonitoring();
-      }
-    } catch(_) {}
-  }
-}
+});
 
-init();
+/* ── Simulate ───────────────────────────────────────────────────────────── */
+$("sim-btn").addEventListener("click", async () => {
+  const ips = getBulbIps(), team = simTeam.value;
+  const show = (cls, text) => { simResult.className = "simulate-result " + cls; simResult.textContent = text; };
+  if (!ips.length) return show("err", "Enter a bulb IP first.");
+  if (!team) return show("err", "Pick a team first.");
+  $("sim-btn").disabled = true; show("", `Flashing ${team}…`);
+  try {
+    const r = await fetch("/api/simulate-goal", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ bulb_ips: ips, team, flash_duration: num("flash_duration", 12),
+                             flash_interval: num("flash_interval", 0.45), flash_transition_ms: num("flash_transition_ms", 0) }),
+    });
+    const d = await r.json();
+    d.ok ? show("ok", "✓ Flash complete.") : show("err", d.error || "Failed.");
+  } catch (e) { show("err", e.message); }
+  $("sim-btn").disabled = false;
+});
+
+/* ── Init ───────────────────────────────────────────────────────────────── */
+(async function init() {
+  let theme = "dark"; try { theme = localStorage.getItem(THEME_KEY) || "dark"; } catch (_) {}
+  setTheme(theme);
+  await loadTeams();
+  loadSettings();
+  attachSettingsHandlers();
+  initLog();
+  await loadGames();
+  pollStatus();
+  setInterval(pollStatus, 3000);
+  setInterval(() => {
+    const a = document.activeElement;
+    if (!(a && a.classList && a.classList.contains("game-delay-input"))) loadGames();
+  }, 60000);
+  setInterval(refreshLiveClocks, 30000);
+})();
 </script>
 </body>
 </html>
