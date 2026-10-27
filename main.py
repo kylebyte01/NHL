@@ -3,13 +3,17 @@ NHL Goal Light Controller
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
 Monitors NHL games in real time and flashes one or more TP-Link Kasa smart
-bulbs in the scoring team's colours whenever a goal is scored.
+bulbs in the scoring team's colours (and rhythm) whenever a goal is scored.
+
+Modes
+-----
+  * DAEMON=1   (what the web GUI uses) tracks EVERY game, every day, forever.
+               Settings can be changed live over stdin — no restart needed.
+  * GAME_IDS   tracks a fixed list of games, then exits.
+  * (neither)  interactive picker in the terminal.
 
 TV delay
 --------
-Every game gets a delay (seconds) before the flash fires, so the light lines
-up with your stream:
-
   * games involving the PRIMARY team (default MTL)  -> PRIMARY_DELAY_SECONDS (35)
   * every other game                                 -> DEFAULT_DELAY_SECONDS (45)
   * an explicit per-game override (GAME_DELAYS json) -> wins over both
@@ -17,13 +21,18 @@ up with your stream:
 from __future__ import annotations
 
 import asyncio
+import colorsys
 import json
 import logging
 import os
 import random
 import re
 import signal
+import sys
+import statistics
+import threading
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -43,55 +52,114 @@ LIVE_STATES = frozenset({"LIVE", "CRIT"})
 PREGAME_STATES = frozenset({"PRE", "FUT"})
 RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 STALE_SECONDS = 30.0
+SCHEDULE_REFRESH_SECONDS = 600     # daemon re-reads the schedule this often
+GIVE_UP_AFTER = timedelta(hours=4)  # postponed / never-started games
+MIN_STEP_GAP = 0.03                # never hammer a bulb faster than this
 
 DEFAULT_PRIMARY_TEAM = "MTL"
 DEFAULT_PRIMARY_DELAY = 35.0
 DEFAULT_OTHER_DELAY = 45.0
 
 
-# ── team data ────────────────────────────────────────────────────────────────
+# ── team styles: colours + flash rhythm ──────────────────────────────────────
+#
+# Many teams share colours (five red/black teams, a dozen blue ones), so every
+# team ALSO gets a flash rhythm.  One "beat" = flash_interval seconds.
+#   A / B  = the team's two main colours       W = white
+#   C      = accent colour (falls back to W)   D = dark (bulb dimmed to ~3 %)
+
+PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
+    "alt":        (("A", 1), ("B", 1)),                              # even A/B
+    "slow":       (("A", 2), ("B", 2)),                              # even, slow
+    "gallop":     (("A", 2), ("B", 1)),                              # long A, short B
+    "rev-gallop": (("A", 1), ("B", 2)),                              # short A, long B
+    "double-tap": (("A", 1), ("D", 1), ("A", 1), ("B", 2)),          # A-A-B
+    "white-tick": (("A", 1), ("W", 1), ("B", 1), ("W", 1)),          # white between
+    "dark-gap":   (("A", 1), ("D", 1), ("B", 1), ("D", 1)),          # flicker
+    "heartbeat":  (("A", 1), ("B", 1), ("D", 2)),                    # two beats + rest
+    "tri-color":  (("A", 1), ("B", 1), ("C", 1)),                    # three-colour cycle
+    "a-heavy":    (("A", 3), ("B", 1)),
+    "b-heavy":    (("A", 1), ("B", 3)),
+}
+
+
+def bulb_hsv(hex_color: str) -> tuple[int, int, int]:
+    """Convert a brand hex colour to what a bulb can show.
+
+    Hue and saturation stay true to the brand colour.  Brightness is lifted for
+    dark brand colours (navy, burgundy…) because a dim LED just looks black, and
+    near-black is mapped to a deliberate 'dark' flash step.
+    """
+    hx = hex_color.lstrip("#")
+    r, g, b = (int(hx[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    h, s, v = colorsys.rgb_to_hsv(r, g, b)
+    H, S, V = round(h * 360) % 360, round(s * 100), round(v * 100)
+    if V < 15 and S < 50:
+        return 0, 0, 3                      # black → dark
+    if S < 12:
+        return 0, 0, max(V, 55)             # white / silver
+    if V < 45 and S < 40:
+        return H, S, 12                     # dark steel-grey
+    return H, S, max(V, 60)                 # chromatic: keep hue, lift brightness
+
 
 @dataclass(frozen=True)
-class TeamPalette:
-    primary: tuple[int, int, int]    # HSV (h 0-360, s 0-100, v 0-100)
-    secondary: tuple[int, int, int]
+class TeamStyle:
+    a: str                        # primary colour (hex)
+    b: str                        # secondary colour (hex)
+    c: Optional[str]              # accent colour (hex) or None
+    pattern: str                  # key of PATTERNS
+
+    def palette(self) -> dict[str, tuple[int, int, int]]:
+        return {
+            "A": bulb_hsv(self.a),
+            "B": bulb_hsv(self.b),
+            "C": bulb_hsv(self.c) if self.c else (0, 0, 100),
+            "W": (0, 0, 100),
+            "D": (0, 0, 3),
+        }
+
+    def steps(self) -> tuple[tuple[str, int], ...]:
+        return PATTERNS[self.pattern]
 
 
-TEAM_COLORS: dict[str, TeamPalette] = {
-    "ANA": TeamPalette((18, 99, 99), (196, 6, 68)),     # Orange, Silver
-    "BOS": TeamPalette((42, 92, 99), (0, 0, 7)),        # Gold, Black
-    "BUF": TeamPalette((219, 100, 53), (42, 92, 99)),   # Navy, Gold
-    "CGY": TeamPalette((352, 100, 82), (42, 92, 99)),   # Red, Gold
-    "CAR": TeamPalette((353, 92, 81), (0, 0, 7)),       # Red, Black
-    "CHI": TeamPalette((350, 95, 81), (0, 0, 7)),       # Red, Black
-    "COL": TeamPalette((341, 66, 44), (206, 76, 57)),   # Burgundy, Blue
-    "CBJ": TeamPalette((213, 100, 33), (353, 92, 81)),  # Navy, Red
-    "DAL": TeamPalette((161, 100, 41), (0, 0, 7)),      # Green, Black
-    "DET": TeamPalette((353, 92, 81), (0, 0, 100)),     # Red, White
-    "EDM": TeamPalette((18, 99, 99), (215, 94, 26)),    # Orange, Navy
-    "FLA": TeamPalette((215, 94, 26), (350, 92, 78)),   # Navy, Red
-    "LAK": TeamPalette((0, 0, 7), (196, 6, 68)),        # Black, Silver
-    "MIN": TeamPalette((157, 70, 28), (350, 85, 65)),   # Green, Red
-    "MTL": TeamPalette((354, 83, 69), (223, 82, 54)),   # Red, Blue
-    "NSH": TeamPalette((41, 89, 100), (215, 94, 26)),   # Gold, Navy
-    "NJD": TeamPalette((353, 92, 81), (0, 0, 7)),       # Red, Black
-    "NYI": TeamPalette((208, 100, 61), (18, 99, 99)),   # Blue, Orange
-    "NYR": TeamPalette((220, 100, 66), (353, 92, 81)),  # Blue, Red
-    "OTT": TeamPalette((353, 84, 77), (37, 52, 72)),    # Red, Gold
-    "PHI": TeamPalette((17, 99, 97), (0, 0, 7)),        # Orange, Black
-    "PIT": TeamPalette((0, 0, 7), (42, 92, 99)),        # Black, Gold
-    "SJS": TeamPalette((184, 100, 46), (29, 100, 92)),  # Teal, Orange
-    "SEA": TeamPalette((207, 100, 16), (180, 29, 85)),  # Deep Navy, Ice Blue
-    "STL": TeamPalette((219, 100, 53), (42, 92, 99)),   # Blue, Gold
-    "TBL": TeamPalette((217, 100, 41), (0, 0, 100)),    # Blue, White
-    "TOR": TeamPalette((219, 100, 36), (0, 0, 100)),    # Blue, White
-    "UTA": TeamPalette((216, 99, 31), (197, 44, 73)),   # Navy, Teal
-    "VAN": TeamPalette((219, 100, 36), (156, 100, 53)), # Blue, Green
-    "VGK": TeamPalette((41, 50, 71), (206, 29, 28)),    # Muted Gold, Steel Grey
-    "WSH": TeamPalette((350, 85, 77), (215, 94, 26)),   # Red, Navy
-    "WPG": TeamPalette((215, 94, 26), (210, 43, 38)),   # Navy, Aviator Blue
+# Colours: official club brand colours as of the 2026-27 season.
+TEAM_STYLES: dict[str, TeamStyle] = {
+    "ANA": TeamStyle("#F47A38", "#B9975B", None,      "gallop"),      # orange, gold
+    "BOS": TeamStyle("#FFB81C", "#000000", None,      "slow"),        # gold, black
+    "BUF": TeamStyle("#003087", "#FFB81C", None,      "white-tick"),  # royal blue, gold
+    "CGY": TeamStyle("#D2001C", "#FAAF19", None,      "rev-gallop"),  # red, yellow
+    "CAR": TeamStyle("#CE1126", "#000000", None,      "alt"),         # red, black
+    "CHI": TeamStyle("#CF0A2C", "#000000", None,      "double-tap"),  # red, black
+    "COL": TeamStyle("#6F263D", "#236192", "#A2AAAD", "tri-color"),   # burgundy, blue, silver
+    "CBJ": TeamStyle("#002654", "#CE1126", None,      "b-heavy"),        # union blue, red
+    "DAL": TeamStyle("#006847", "#8F8F8C", None,      "slow"),        # victory green, silver
+    "DET": TeamStyle("#CE1126", "#FFFFFF", None,      "gallop"),      # red, white
+    "EDM": TeamStyle("#041E42", "#FF4C00", None,      "double-tap"),  # royal navy, orange
+    "FLA": TeamStyle("#C8102E", "#041E42", None,      "dark-gap"),    # red, navy
+    "LAK": TeamStyle("#A2AAAD", "#000000", None,      "dark-gap"),    # silver, black
+    "MIN": TeamStyle("#154734", "#A6192E", "#EAAA00", "b-heavy"),     # forest green, red, gold
+    "MTL": TeamStyle("#AF1E2D", "#192168", None,      "alt"),         # red, blue
+    "NSH": TeamStyle("#FFB81C", "#041E42", None,      "rev-gallop"),  # gold, navy
+    "NJD": TeamStyle("#CE1126", "#000000", None,      "heartbeat"),   # red, black
+    "NYI": TeamStyle("#00539B", "#F47D30", None,      "slow"),        # blue, orange
+    "NYR": TeamStyle("#0038A8", "#CE1126", "#FFFFFF", "tri-color"),   # blue, red, white
+    "OTT": TeamStyle("#C52032", "#000000", None,      "b-heavy"),     # red, black
+    "PHI": TeamStyle("#F74902", "#000000", None,      "gallop"),      # orange, black
+    "PIT": TeamStyle("#FCB514", "#000000", None,      "white-tick"),  # gold, black
+    "SJS": TeamStyle("#006D75", "#EA7200", None,      "a-heavy"),  # pacific teal, orange
+    "SEA": TeamStyle("#99D9D9", "#E9072B", None,      "alt"),         # ice blue, red alert
+    "STL": TeamStyle("#002F87", "#FCB514", None,      "gallop"),      # blue, yellow
+    "TBL": TeamStyle("#002868", "#FFFFFF", None,      "alt"),         # blue, white
+    "TOR": TeamStyle("#00205B", "#FFFFFF", None,      "dark-gap"),    # blue, white
+    "UTA": TeamStyle("#6CACE4", "#010101", "#FFFFFF", "a-heavy"),     # mountain blue, rock black
+    "VAN": TeamStyle("#00205B", "#00843D", None,      "b-heavy"),     # blue, green
+    "VGK": TeamStyle("#B4975A", "#333F42", "#C8102E", "tri-color"),   # gold, steel grey, red
+    "WSH": TeamStyle("#C8102E", "#041E42", "#FFFFFF", "a-heavy"),     # red, navy, white
+    "WPG": TeamStyle("#004C97", "#FFFFFF", "#AC162C", "double-tap"),  # aviator blue, white, red
 }
-DEFAULT_PALETTE = TeamPalette((0, 100, 100), (0, 0, 100))
+DEFAULT_STYLE = TeamStyle("#FF0000", "#FFFFFF", None, "alt")
+TEAM_COLORS = TEAM_STYLES   # backwards-compatible alias
 
 TEAM_NAMES: dict[str, str] = {
     "ANA": "Anaheim Ducks", "BOS": "Boston Bruins", "BUF": "Buffalo Sabres",
@@ -103,7 +171,7 @@ TEAM_NAMES: dict[str, str] = {
     "NYR": "New York Rangers", "OTT": "Ottawa Senators", "PHI": "Philadelphia Flyers",
     "PIT": "Pittsburgh Penguins", "SJS": "San Jose Sharks", "SEA": "Seattle Kraken",
     "STL": "St. Louis Blues", "TBL": "Tampa Bay Lightning", "TOR": "Toronto Maple Leafs",
-    "UTA": "Utah Hockey Club", "VAN": "Vancouver Canucks", "VGK": "Vegas Golden Knights",
+    "UTA": "Utah Mammoth", "VAN": "Vancouver Canucks", "VGK": "Vegas Golden Knights",
     "WSH": "Washington Capitals", "WPG": "Winnipeg Jets",
 }
 
@@ -172,9 +240,18 @@ NUMERIC_ENV_FIELDS: dict[str, tuple[str, Callable[[str], float]]] = {
     "default_delay_seconds":  ("DEFAULT_DELAY_SECONDS", float),
 }
 
+# Smallest accepted values (stops a typo from hammering the NHL API / a bulb).
+MINIMUMS: dict[str, float] = {
+    "poll_live_seconds": 0.1, "poll_critical_seconds": 0.1,
+    "poll_pregame_seconds": 1.0, "poll_error_seconds": 1.0,
+    "flash_interval": 0.1, "flash_duration": 1.0, "request_timeout": 1.0,
+}
 
-@dataclass(frozen=True)
+
+@dataclass
 class AppConfig:
+    """Mutable on purpose: the daemon applies GUI changes to this one shared object,
+    and every consumer reads the fields at the moment it needs them."""
     bulb_ips: tuple[str, ...] = ()
     request_timeout: float = 10.0
     max_retries: int = 4
@@ -189,11 +266,12 @@ class AppConfig:
     poll_pregame_seconds: float = 10.0
     poll_error_seconds: float = 5.0
     restore_transition_ms: int = 150
-    flash_transition_ms: int = 120
+    flash_transition_ms: int = 0
     primary_team: str = DEFAULT_PRIMARY_TEAM
     primary_delay_seconds: float = DEFAULT_PRIMARY_DELAY
     default_delay_seconds: float = DEFAULT_OTHER_DELAY
-    game_delays: dict = field(default_factory=dict)   # {game_id: seconds}
+    game_delays: dict = field(default_factory=dict)      # {game_id: seconds}
+    muted_games: set = field(default_factory=set)        # {game_id}
 
     def delay_for(self, game: GameInfo) -> float:
         """TV delay (s) for a game: explicit override > primary team > default."""
@@ -207,6 +285,49 @@ class AppConfig:
     def is_primary_game(self, game: GameInfo) -> bool:
         return self.primary_team in (game.away_abbrev, game.home_abbrev)
 
+    def apply(self, data: dict) -> set[str]:
+        """Apply a (partial) settings dict in place; returns the names that changed."""
+        changed: set[str] = set()
+
+        for name, (_, cast) in NUMERIC_ENV_FIELDS.items():
+            if name not in data:
+                continue
+            try:
+                value = cast(str(data[name]))
+            except (TypeError, ValueError):
+                continue
+            if value < MINIMUMS.get(name, 0.0):
+                continue
+            if getattr(self, name) != value:
+                setattr(self, name, value)
+                changed.add(name)
+
+        if "primary_team" in data:
+            team = str(data["primary_team"] or "").strip().upper()
+            if team in TEAM_STYLES and team != self.primary_team:
+                self.primary_team = team
+                changed.add("primary_team")
+
+        if "bulb_ips" in data:
+            ips = parse_bulb_ips(data["bulb_ips"])
+            if ips and ips != self.bulb_ips:
+                self.bulb_ips = ips
+                changed.add("bulb_ips")
+
+        if "game_delays" in data:
+            delays = _clean_game_delays(data["game_delays"])
+            if delays != self.game_delays:
+                self.game_delays = delays
+                changed.add("game_delays")
+
+        if "muted_games" in data:
+            muted = _clean_id_set(data["muted_games"])
+            if muted != self.muted_games:
+                self.muted_games = muted
+                changed.add("muted_games")
+
+        return changed
+
     @classmethod
     def from_env(cls) -> "AppConfig":
         ips = parse_bulb_ips(os.getenv("BULB_IP", ""))
@@ -215,16 +336,18 @@ class AppConfig:
                 "ERROR: Set the BULB_IP environment variable to your bulb's IP address "
                 "(comma-separate several), e.g.  export BULB_IP=192.168.1.x"
             )
-        kwargs = {name: _env(var, cast, getattr(cls, name))
+        defaults = cls()
+        kwargs = {name: _env(var, cast, getattr(defaults, name))
                   for name, (var, cast) in NUMERIC_ENV_FIELDS.items()}
         primary = (os.getenv("PRIMARY_TEAM", "") or DEFAULT_PRIMARY_TEAM).strip().upper()
-        if primary not in TEAM_COLORS:
+        if primary not in TEAM_STYLES:
             log.warning("Unknown PRIMARY_TEAM %r — falling back to %s.", primary, DEFAULT_PRIMARY_TEAM)
             primary = DEFAULT_PRIMARY_TEAM
         return cls(
             bulb_ips=ips,
             primary_team=primary,
             game_delays=_parse_game_delays(os.getenv("GAME_DELAYS", "")),
+            muted_games=_clean_id_set((os.getenv("MUTED_GAMES", "") or "").split(",")),
             **kwargs,
         )
 
@@ -261,14 +384,7 @@ def parse_bulb_ips(raw) -> tuple[str, ...]:
     return tuple(out)
 
 
-def _parse_game_delays(raw: str) -> dict[int, float]:
-    if not raw or not raw.strip():
-        return {}
-    try:
-        data = json.loads(raw)
-    except ValueError:
-        log.warning("GAME_DELAYS is not valid JSON — ignoring.")
-        return {}
+def _clean_game_delays(data) -> dict[int, float]:
     out: dict[int, float] = {}
     if isinstance(data, dict):
         for key, value in data.items():
@@ -276,6 +392,26 @@ def _parse_game_delays(raw: str) -> dict[int, float]:
                 out[int(key)] = max(0.0, float(value))
             except (TypeError, ValueError):
                 continue
+    return out
+
+
+def _parse_game_delays(raw: str) -> dict[int, float]:
+    if not raw or not raw.strip():
+        return {}
+    try:
+        return _clean_game_delays(json.loads(raw))
+    except ValueError:
+        log.warning("GAME_DELAYS is not valid JSON — ignoring.")
+        return {}
+
+
+def _clean_id_set(values) -> set[int]:
+    out: set[int] = set()
+    for v in values or ():
+        try:
+            out.add(int(v))
+        except (TypeError, ValueError):
+            continue
     return out
 
 
@@ -379,10 +515,7 @@ class NhlApiClient:
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def __aenter__(self) -> "NhlApiClient":
-        self._session = aiohttp.ClientSession(
-            timeout=aiohttp.ClientTimeout(total=self._config.request_timeout),
-            headers={"User-Agent": "nhl-goal-light/2.0"},
-        )
+        self._session = aiohttp.ClientSession(headers={"User-Agent": "nhl-goal-light/3.0"})
         return self
 
     async def __aexit__(self, *_) -> None:
@@ -401,7 +534,9 @@ class NhlApiClient:
 
         for attempt in range(attempts):
             try:
-                async with self._session.get(url) as resp:
+                # timeout is read per request so GUI changes apply instantly
+                timeout = aiohttp.ClientTimeout(total=cfg.request_timeout)
+                async with self._session.get(url, timeout=timeout) as resp:
                     if resp.status == 404:
                         return {}
                     if resp.status in RETRYABLE_STATUS:
@@ -529,11 +664,13 @@ class KasaBulb:
             except TypeError:
                 await self._light.set_color_temp(ct)
 
-    async def _turn_off_instant(self) -> None:
-        try:
-            await self._bulb.turn_off(transition=0)
-        except TypeError:
-            await self._bulb.turn_off()
+    async def _show(self, hsv: tuple[int, int, int], snap: BulbSnapshot) -> None:
+        h, s, v = hsv
+        ms = self._config.flash_transition_ms
+        if snap.supports_color:
+            await self._set_hsv(h, s, _clamp(v, 1, 100), ms)
+        else:                                   # white-only bulb: rhythm via brightness
+            await self._set_brightness(_clamp(v, 1, 100), ms)
 
     # -- public API ---------------------------------------------------------
 
@@ -586,28 +723,33 @@ class KasaBulb:
                 log.error("Failed to restore bulb %s (%s) — will reconnect next time.", self.ip, exc)
                 await self._reset()
 
-    async def flash(self, palette: TeamPalette, snap: BulbSnapshot) -> None:
+    async def flash(self, style: TeamStyle, snap: BulbSnapshot) -> None:
+        """Play the team's pattern for `flash_duration` seconds.
+
+        Timing: the hold time of each step is (beats × flash_interval) MINUS the
+        bulb's typical (median) command latency, and we never "catch up" after a slow
+        command.  Catching up fires several commands back-to-back, which makes one
+        colour appear for a few ms and its neighbour for a long time.
+        """
         cfg = self._config
+        palette = style.palette()
+        steps = style.steps()
         async with self._lock:
             try:
                 await self._connect()
                 await self._bulb.turn_on()
                 loop = asyncio.get_running_loop()
-                tick = loop.time()
-                end = tick + cfg.flash_duration
-                use_primary = True
+                end = loop.time() + cfg.flash_duration
+                recent: deque[float] = deque(maxlen=5)   # median ignores one-off stalls
+                i = 0
                 while loop.time() < end:
-                    h, s, v = palette.primary if use_primary else palette.secondary
-                    if v == 0:
-                        await self._turn_off_instant()
-                    elif snap.supports_color:
-                        await self._set_hsv(h, s, _clamp(v, 1, 100), cfg.flash_transition_ms)
-                    else:
-                        await self._set_brightness(_clamp(v, 1, 100), cfg.flash_transition_ms)
-                    use_primary = not use_primary
-                    # fixed cadence: network latency doesn't stretch the strobe
-                    tick += cfg.flash_interval
-                    await asyncio.sleep(max(0.0, tick - loop.time()))
+                    key, beats = steps[i % len(steps)]
+                    i += 1
+                    t0 = loop.time()
+                    await self._show(palette[key], snap)
+                    recent.append(loop.time() - t0)
+                    hold = beats * cfg.flash_interval
+                    await asyncio.sleep(max(MIN_STEP_GAP, hold - statistics.median(recent)))
                 await self._bulb.turn_on()
             except Exception as exc:
                 log.error("Flash failed on bulb %s (%s) — will reconnect next time.", self.ip, exc)
@@ -622,16 +764,25 @@ class BulbController:
     """Drives one or more bulbs in parallel; one dead bulb never blocks the rest."""
 
     def __init__(self, config: AppConfig) -> None:
+        self._config = config
         self._bulbs = [KasaBulb(ip, config) for ip in config.bulb_ips]
+
+    def set_ips(self, ips: tuple[str, ...]) -> None:
+        """Swap the bulb list live (call from the event-loop thread)."""
+        existing = {b.ip: b for b in self._bulbs}
+        self._bulbs = [existing.pop(ip, None) or KasaBulb(ip, self._config) for ip in ips]
+        for old in existing.values():
+            asyncio.get_running_loop().create_task(old.close())
+        log.info("Bulbs now: %s", ", ".join(ips) or "(none)")
 
     async def capture_state(
         self, fallback: Optional[dict[str, BulbSnapshot]] = None
     ) -> dict[str, BulbSnapshot]:
-        results = await asyncio.gather(*(b.capture() for b in self._bulbs),
-                                       return_exceptions=True)
+        bulbs = list(self._bulbs)
+        results = await asyncio.gather(*(b.capture() for b in bulbs), return_exceptions=True)
         snaps: dict[str, BulbSnapshot] = {}
         errors: list[str] = []
-        for bulb, result in zip(self._bulbs, results):
+        for bulb, result in zip(bulbs, results):
             if isinstance(result, BaseException):
                 if fallback and bulb.ip in fallback:
                     snaps[bulb.ip] = fallback[bulb.ip]
@@ -645,12 +796,13 @@ class BulbController:
         return snaps
 
     async def restore_state(self, snaps: dict[str, BulbSnapshot]) -> None:
-        await asyncio.gather(*(b.restore(snaps[b.ip]) for b in self._bulbs if b.ip in snaps))
+        bulbs = [b for b in self._bulbs if b.ip in snaps]
+        await asyncio.gather(*(b.restore(snaps[b.ip]) for b in bulbs))
 
     async def flash_team(self, team: str, snaps: dict[str, BulbSnapshot]) -> None:
-        palette = TEAM_COLORS.get(team, DEFAULT_PALETTE)
-        await asyncio.gather(*(b.flash(palette, snaps[b.ip])
-                               for b in self._bulbs if b.ip in snaps))
+        style = TEAM_STYLES.get(team, DEFAULT_STYLE)
+        bulbs = [b for b in self._bulbs if b.ip in snaps]
+        await asyncio.gather(*(b.flash(style, snaps[b.ip]) for b in bulbs))
 
     async def shutdown(self) -> None:
         await asyncio.gather(*(b.close() for b in self._bulbs), return_exceptions=True)
@@ -712,8 +864,13 @@ async def flash_worker(
         # Re-capture so we restore what the bulb looks like *now*, not at start-up.
         try:
             snaps = await bulb.capture_state(fallback)
+            fallback = snaps
         except Exception as exc:
-            log.error("Could not capture bulb state (%s) — using start-up snapshot.", exc)
+            if not fallback:
+                log.error("No reachable bulb (%s) — skipping %s flash.", exc, event.scoring_team)
+                queue.task_done()
+                continue
+            log.error("Could not capture bulb state (%s) — using last known snapshot.", exc)
             snaps = fallback
         try:
             stop = await _flash_burst(queue, bulb, snaps, config, event)
@@ -731,9 +888,13 @@ async def _deliver_goal(
     tag: str,
     queue: "asyncio.Queue[Optional[GoalEvent]]",
     shutdown: asyncio.Event,
+    config: AppConfig,
 ) -> None:
     await _interruptible_sleep(delay, shutdown)
     if shutdown.is_set():
+        return
+    if event.game_id in config.muted_games:          # muting applies instantly
+        log.info("[%s] %s goal not flashed (game muted).", tag, event.scoring_team)
         return
     log.info("[%s] Releasing %s flash (after %.0fs TV delay).", tag, event.scoring_team, delay)
     await queue.put(event)
@@ -747,7 +908,6 @@ async def monitor_game(
     config: AppConfig,
 ) -> None:
     tag = f"{game.away_abbrev}@{game.home_abbrev}"
-    delay = config.delay_for(game)
     if game.game_id in config.game_delays:
         kind = "custom"
     elif config.is_primary_game(game):
@@ -755,15 +915,17 @@ async def monitor_game(
     else:
         kind = "default"
     log.info("Tracking %s [%s] — TV delay %.0fs (%s)",
-             tag, _format_local_time(game.start_time_utc), delay, kind)
+             tag, _format_local_time(game.start_time_utc), config.delay_for(game), kind)
 
     pending: set[asyncio.Task] = set()
 
     def schedule(team: str, count: int) -> None:
-        # Delayed goals run as their own tasks so polling is never blocked.
+        # Delay is looked up at goal time (so GUI edits apply to the next goal), and
+        # each goal waits in its own task so polling is never blocked.
+        delay = config.delay_for(game)
         for _ in range(count):
-            task = asyncio.create_task(
-                _deliver_goal(GoalEvent(game.game_id, team), delay, tag, goal_queue, shutdown))
+            task = asyncio.create_task(_deliver_goal(
+                GoalEvent(game.game_id, team), delay, tag, goal_queue, shutdown, config))
             pending.add(task)
             task.add_done_callback(pending.discard)
 
@@ -800,6 +962,9 @@ async def _track_game(
     last: Optional[GameStatus] = None
     waiting_logged = False
 
+    def expired() -> bool:
+        return datetime.now(timezone.utc) > game.start_time_utc + GIVE_UP_AFTER
+
     while not shutdown.is_set():
         try:
             status = await nhl_client.fetch_game_status(game.game_id)
@@ -809,12 +974,18 @@ async def _track_game(
             continue
 
         if status is None:
+            if last is None and expired():
+                log.info("[%s] No data %dh after start — giving up.", tag, GIVE_UP_AFTER.seconds // 3600)
+                return
             await _interruptible_sleep(config.poll_error_seconds, shutdown)
             continue
 
         if status.away_score is None or status.home_score is None:
             if status.game_state in FINAL_STATES:
                 log.info("[%s] Game ended (no score payload).", tag)
+                return
+            if last is None and expired():
+                log.info("[%s] Never started (postponed?) — giving up.", tag)
                 return
             if not waiting_logged and datetime.now(timezone.utc) >= game.start_time_utc:
                 log.info("[%s] Waiting for score data...", tag)
@@ -843,6 +1014,84 @@ async def _track_game(
             return
 
         await _interruptible_sleep(_poll_interval(status.game_state, config), shutdown)
+
+
+# ── daemon: every game, every day, live-configurable ─────────────────────────
+
+async def _daemon_loop(
+    config: AppConfig,
+    nhl_client: NhlApiClient,
+    goal_queue: "asyncio.Queue[Optional[GoalEvent]]",
+    shutdown: asyncio.Event,
+) -> None:
+    tracked: dict[int, asyncio.Task] = {}
+    done_ids: set[int] = set()
+    last_summary: Optional[tuple[int, int]] = None
+    log.info("Auto mode: tracking every NHL game, every day. Settings apply instantly.")
+    try:
+        while not shutdown.is_set():
+            try:
+                games = await nhl_client.fetch_todays_games()
+            except Exception as exc:
+                log.error("Could not fetch schedule: %s — retrying in 30s.", exc)
+                await _interruptible_sleep(30, shutdown)
+                continue
+
+            for game in games:
+                if game.game_id in tracked or game.game_id in done_ids:
+                    continue
+                if game.game_state in FINAL_STATES:
+                    done_ids.add(game.game_id)
+                    continue
+                tracked[game.game_id] = asyncio.create_task(
+                    monitor_game(game, nhl_client, goal_queue, shutdown, config))
+
+            for gid, task in list(tracked.items()):
+                if task.done():
+                    del tracked[gid]
+                    done_ids.add(gid)
+                    if not task.cancelled() and task.exception() is not None:
+                        log.error("Monitor for game %s crashed: %r", gid, task.exception())
+
+            summary = (len(tracked), len(done_ids))
+            if summary != last_summary:
+                log.info("Tracking %d game(s); %d finished today.", *summary)
+                last_summary = summary
+
+            await _interruptible_sleep(SCHEDULE_REFRESH_SECONDS, shutdown)
+    finally:
+        for task in tracked.values():
+            task.cancel()
+        await asyncio.gather(*tracked.values(), return_exceptions=True)
+
+
+def start_command_listener(
+    loop: asyncio.AbstractEventLoop,
+    handler: Callable[[dict], None],
+    shutdown: asyncio.Event,
+) -> None:
+    """Read JSON lines from stdin (sent by the web server) on a helper thread.
+    EOF means the server went away, so we shut down instead of becoming an orphan."""
+    def reader() -> None:
+        try:
+            for line in sys.stdin:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    msg = json.loads(line)
+                except ValueError:
+                    continue
+                loop.call_soon_threadsafe(handler, msg)
+        except Exception:
+            pass
+        finally:
+            try:
+                loop.call_soon_threadsafe(shutdown.set)
+            except RuntimeError:
+                pass
+
+    threading.Thread(target=reader, name="stdin-commands", daemon=True).start()
 
 
 # ── CLI / entry point ────────────────────────────────────────────────────────
@@ -894,24 +1143,26 @@ def install_signal_handlers(shutdown: asyncio.Event) -> None:
 
 async def run() -> None:
     config = AppConfig.from_env()
+    daemon = os.getenv("DAEMON", "") == "1"
 
     async with NhlApiClient(config) as nhl_client:
-        log.info("Fetching today's games...")
-        games = await nhl_client.fetch_todays_games()
-
-        game_ids_env = os.getenv("GAME_IDS", "").strip()
-        if game_ids_env:
-            id_set = {s.strip() for s in game_ids_env.split(",") if s.strip()}
-            selected = [g for g in games if str(g.game_id) in id_set]
-            if not selected:
-                log.error("GAME_IDS=%r matched no games in today's schedule.", game_ids_env)
-                return
-            log.info("Game IDs from env: %s", ", ".join(str(g.game_id) for g in selected))
-        else:
-            selected = select_games(games, config)
-            if not selected:
-                print("No games selected. Exiting.")
-                return
+        selected: list[GameInfo] = []
+        if not daemon:
+            log.info("Fetching today's games...")
+            games = await nhl_client.fetch_todays_games()
+            game_ids_env = os.getenv("GAME_IDS", "").strip()
+            if game_ids_env:
+                id_set = {s.strip() for s in game_ids_env.split(",") if s.strip()}
+                selected = [g for g in games if str(g.game_id) in id_set]
+                if not selected:
+                    log.error("GAME_IDS=%r matched no games in today's schedule.", game_ids_env)
+                    return
+                log.info("Game IDs from env: %s", ", ".join(str(g.game_id) for g in selected))
+            else:
+                selected = select_games(games, config)
+                if not selected:
+                    print("No games selected. Exiting.")
+                    return
 
         log.info("Primary team: %s (delay %.0fs) — other games: %.0fs",
                  config.primary_team, config.primary_delay_seconds, config.default_delay_seconds)
@@ -923,30 +1174,48 @@ async def run() -> None:
             try:
                 snapshots = await bulb.capture_state()
             except Exception as exc:
-                log.error("%s", exc)
-                return
+                if not daemon:
+                    log.error("%s", exc)
+                    return
+                log.error("%s — will keep trying whenever a goal is scored.", exc)
+                snapshots = {}
 
             shutdown = asyncio.Event()
             install_signal_handlers(shutdown)
-
             goal_queue: asyncio.Queue[Optional[GoalEvent]] = asyncio.Queue()
             worker = asyncio.create_task(flash_worker(goal_queue, bulb, snapshots, config))
-            monitors = [
-                asyncio.create_task(monitor_game(g, nhl_client, goal_queue, shutdown, config))
-                for g in selected
-            ]
 
-            log.info("Tracking %d game(s). Press Ctrl+C to stop.", len(selected))
             try:
-                await asyncio.gather(*monitors)
-                if not shutdown.is_set():
-                    await goal_queue.join()
+                if daemon:
+                    def on_command(msg: dict) -> None:
+                        if msg.get("type") != "config":
+                            return
+                        changed = config.apply(msg.get("settings") or {})
+                        if "bulb_ips" in changed:
+                            bulb.set_ips(config.bulb_ips)
+                        if changed:
+                            log.info("Settings updated: %s", ", ".join(sorted(changed)))
+
+                    start_command_listener(asyncio.get_running_loop(), on_command, shutdown)
+                    await _daemon_loop(config, nhl_client, goal_queue, shutdown)
+                else:
+                    monitors = [
+                        asyncio.create_task(monitor_game(g, nhl_client, goal_queue, shutdown, config))
+                        for g in selected
+                    ]
+                    log.info("Tracking %d game(s). Press Ctrl+C to stop.", len(selected))
+                    try:
+                        await asyncio.gather(*monitors)
+                        if not shutdown.is_set():
+                            await goal_queue.join()
+                    finally:
+                        shutdown.set()
+                        for task in monitors:
+                            if not task.done():
+                                task.cancel()
+                        await asyncio.gather(*monitors, return_exceptions=True)
             finally:
                 shutdown.set()
-                for task in monitors:
-                    if not task.done():
-                        task.cancel()
-                await asyncio.gather(*monitors, return_exceptions=True)
                 await goal_queue.put(None)
                 await worker
         finally:

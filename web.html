@@ -2,7 +2,7 @@
 <html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>NHL Goal Light</title>
 <link rel="preconnect" href="https://api.fontshare.com" />
 <link href="https://api.fontshare.com/v2/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet" />
@@ -13,7 +13,7 @@
   --bg: #171614; --surface: #1c1b19; --surface2: #242320; --border: #2e2d2a;
   --text: #e8e6e0; --muted: #7a7870; --accent: #cc0000; --accent-dim: #8b0000;
   --red: #d44c4c; --green: #4caf50; --yellow: #c9a227; --gold: #e0b43a;
-  --radius: 5px; --sidebar-w: 240px; --header-h: 44px;
+  --radius: 5px; --sidebar-w: 250px; --header-h: 44px;
 }
 [data-theme="light"] {
   --bg: #f4f3f0; --surface: #ffffff; --surface2: #ebebea;
@@ -25,27 +25,34 @@
 
 html, body {
   height: 100%; font-family: 'Satoshi', system-ui, sans-serif; font-size: 13px;
-  background: var(--bg); color: var(--text); line-height: 1.5; -webkit-tap-highlight-color: transparent;
+  background: var(--bg); color: var(--text); line-height: 1.5;
+  -webkit-tap-highlight-color: transparent; -webkit-text-size-adjust: 100%;
 }
+body.lock { overflow: hidden; }
 
-/* ── Layout ── */
+/* ── Layout (desktop: fixed app shell, inner panes scroll) ── */
 .app {
-  display: grid; grid-template-rows: var(--header-h) 1fr; grid-template-columns: var(--sidebar-w) 1fr;
-  height: 100vh; overflow: hidden;
+  display: grid; grid-template-rows: var(--header-h) minmax(0, 1fr); grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  height: 100vh; height: 100dvh; overflow: hidden;
 }
 header {
   grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; padding: 0 16px;
   background: var(--surface); border-bottom: 1px solid var(--border); position: relative; z-index: 200;
 }
-.logo { font-weight: 700; font-size: 14px; letter-spacing: -0.2px; }
+.logo { font-weight: 700; font-size: 14px; letter-spacing: -0.2px; white-space: nowrap; }
 .logo span { color: var(--accent); }
 .header-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.save-state { font-size: 11px; color: var(--muted); min-width: 52px; text-align: right; transition: color .2s; }
+.save-state.saving { color: var(--yellow); }
+.save-state.saved { color: var(--green); }
+.save-state.error { color: var(--red); }
 .status-pill {
-  font-size: 11px; font-weight: 500; padding: 2px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 500; padding: 2px 10px; border-radius: 20px; white-space: nowrap;
   background: var(--surface2); border: 1px solid var(--border); color: var(--muted);
   transition: background .2s, color .2s;
 }
 .status-pill.monitoring { background: #1a3a1e; border-color: #2d6633; color: var(--green); }
+.status-pill.warn { border-color: #6b5a10; color: var(--yellow); }
 .icon-btn {
   background: none; border: 1px solid var(--border); border-radius: var(--radius); color: var(--muted);
   width: 32px; height: 32px; cursor: pointer; font-size: 15px; display: flex; align-items: center;
@@ -58,17 +65,13 @@ header {
 .sidebar {
   background: var(--surface); border-right: 1px solid var(--border);
   overflow-x: hidden; overflow-y: auto; padding: 12px 0 32px; transition: transform .25s ease;
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
 }
 .sidebar-section { padding: 0 12px; margin-bottom: 14px; }
 .section-label {
   font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
-  color: var(--muted); margin-bottom: 8px; padding: 0 2px; display: flex; align-items: center; gap: 5px;
+  color: var(--muted); margin-bottom: 8px; padding: 0 2px;
 }
-.section-dirty {
-  width: 6px; height: 6px; border-radius: 50%; background: var(--yellow); flex-shrink: 0;
-  opacity: 0; transition: opacity .2s;
-}
-.section-dirty.visible { opacity: 1; }
 .field { margin-bottom: 7px; }
 .field label { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--muted); margin-bottom: 3px; }
 .field input[type="text"], .field input[type="number"], .field textarea, .field select {
@@ -78,7 +81,6 @@ header {
 }
 .field textarea { resize: vertical; }
 .field select { cursor: pointer; }
-.field .pending { border-color: var(--yellow) !important; }
 .field input:focus, .field textarea:focus, .field select:focus { border-color: var(--accent); }
 
 .btn {
@@ -93,9 +95,6 @@ header {
 .btn-primary:hover:not(:disabled) { background: var(--accent-dim); border-color: var(--accent-dim); color: #fff; }
 .btn-danger { border-color: var(--red); color: var(--red); }
 .btn-danger:hover:not(:disabled) { background: #3a1515; border-color: var(--red); }
-.btn-apply { width: 100%; justify-content: center; margin-top: 6px; font-size: 11px; padding: 4px 10px; color: var(--muted); }
-.btn-apply.has-changes { border-color: var(--yellow); color: var(--yellow); }
-.btn-apply.applied { border-color: var(--green) !important; color: var(--green) !important; }
 
 .bulb-status {
   margin-top: 6px; display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: var(--radius);
@@ -106,6 +105,7 @@ header {
 .bulb-status.connected .dot { background: var(--green); }
 .bulb-status.disconnected { border-color: #6b2020; color: var(--red); }
 .bulb-status.disconnected .dot { background: var(--red); }
+.sidebar-note { font-size: 10.5px; color: var(--muted); padding: 0 14px; margin-top: -4px; }
 
 .tip {
   display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; border-radius: 50%;
@@ -114,11 +114,12 @@ header {
 }
 
 /* ── Main ── */
-.main { overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
-.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+.main { overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; min-height: 0; -webkit-overflow-scrolling: touch; }
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; flex-shrink: 0; }
+.panel.grow { flex: 1 0 auto; display: flex; flex-direction: column; }
 .panel-header {
   display: flex; align-items: center; justify-content: space-between; padding: 9px 14px;
-  border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 500;
+  border-bottom: 1px solid var(--border); font-size: 12px; font-weight: 500; gap: 8px;
 }
 .panel-header-actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .panel-header .btn { padding: 4px 10px; font-size: 11px; }
@@ -132,6 +133,7 @@ header {
 .game-row:last-child { border-bottom: none; }
 .game-row:hover { background: var(--surface2); }
 .game-row.primary { box-shadow: inset 3px 0 0 var(--gold); }
+.game-row.muted .game-matchup { opacity: .45; text-decoration: line-through; }
 .game-row input[type="checkbox"] { accent-color: var(--accent); cursor: pointer; flex-shrink: 0; width: 15px; height: 15px; }
 .game-star { color: var(--gold); font-size: 12px; flex-shrink: 0; }
 .game-matchup {
@@ -151,7 +153,7 @@ header {
 .game-clock.visible { display: inline-block; }
 .game-clock.intermission { color: var(--yellow); background: #2e2a10; border-color: #5a4a10; }
 .team-swatches { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
-.swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(255,255,255,.10); flex-shrink: 0; }
+.swatch { width: 14px; height: 14px; border-radius: 3px; border: 1px solid rgba(255,255,255,.14); flex-shrink: 0; }
 .swatch-sep { width: 1px; height: 12px; background: var(--border); margin: 0 3px; flex-shrink: 0; }
 
 .game-delay-wrap { display: flex; align-items: center; gap: 3px; flex-shrink: 0; font-size: 10px; color: var(--muted); }
@@ -161,22 +163,23 @@ header {
 }
 .game-delay-input:focus { border-color: var(--accent); }
 .game-delay-input.manual { border-color: var(--yellow); }
-.game-delay-input:disabled { opacity: .5; }
 .games-empty { padding: 20px 14px; color: var(--muted); font-size: 12px; text-align: center; }
 .games-hint { padding: 7px 14px; font-size: 11px; color: var(--muted); border-top: 1px solid var(--border); }
 
 /* ── Simulate ── */
 .simulate-body { display: flex; align-items: center; gap: 8px; padding: 10px 14px; flex-wrap: wrap; }
-.simulate-result { font-size: 11px; min-height: 16px; padding: 0 14px 8px; }
+.simulate-result { font-size: 11px; min-height: 16px; padding: 0 14px 4px; }
 .simulate-result.ok { color: var(--green); }
 .simulate-result.err { color: var(--red); }
+.sim-style { display: flex; align-items: center; gap: 8px; padding: 0 14px 10px; font-size: 11px; color: var(--muted); min-height: 26px; flex-wrap: wrap; }
 
 /* ── Log ── */
 .log-wrap {
   background: #0e0e0c; font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 11.5px;
   height: 380px; overflow-y: auto; padding: 8px 12px; border-bottom: 1px solid var(--border);
+  -webkit-overflow-scrolling: touch;
 }
-.log-line { line-height: 1.6; white-space: pre-wrap; word-break: break-all; }
+.log-line { line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
 .log-line.goal { color: var(--accent); font-weight: 600; }
 .log-line.error { color: var(--red); }
 .log-line.done { color: var(--muted); font-style: italic; }
@@ -196,23 +199,37 @@ header {
 input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 input[type="number"] { -moz-appearance: textfield; }
 
+/* ── Mobile: the PAGE scrolls (no nested app shell), drawer for settings ── */
 @media (max-width: 680px) {
-  :root { --header-h: 50px; }
+  :root { --header-h: 52px; }
+  html, body { height: auto; min-height: 100%; }
   #menu-btn { display: flex; }
-  .app { grid-template-columns: 1fr; grid-template-rows: var(--header-h) 1fr; }
+  .app { display: block; height: auto; min-height: 100dvh; overflow: visible; }
+  header {
+    position: sticky; top: 0; height: calc(var(--header-h) + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 12px 0;
+  }
+  .save-state { display: none; }
   .sidebar {
-    position: fixed; top: 0; left: 0; width: min(var(--sidebar-w), 82vw); height: 100dvh; z-index: 150;
-    transform: translateX(-110%); padding-top: calc(var(--header-h) + 8px); box-shadow: 4px 0 24px rgba(0,0,0,.4);
+    position: fixed; top: 0; left: 0; bottom: 0; width: min(var(--sidebar-w), 86vw); z-index: 150;
+    transform: translateX(-110%); padding-top: calc(var(--header-h) + env(safe-area-inset-top) + 8px);
+    padding-bottom: calc(40px + env(safe-area-inset-bottom)); box-shadow: 4px 0 24px rgba(0,0,0,.4);
   }
   .sidebar.open { transform: translateX(0); }
   .sidebar-overlay.open { display: block; }
-  .main { padding: 12px; }
-  .panel-header { flex-wrap: wrap; gap: 6px; }
+  .main { overflow: visible; padding: 12px 12px calc(24px + env(safe-area-inset-bottom)); gap: 12px; }
+  .panel-header { flex-wrap: wrap; }
   .panel-header-actions { width: 100%; justify-content: flex-end; }
-  .game-row { padding: 8px 10px; gap: 6px; }
+  .game-row { padding: 10px; gap: 7px; }
+  .game-row input[type="checkbox"] { width: 20px; height: 20px; }
   .team-swatches { display: none; }
+  .game-delay-input { width: 52px; padding: 6px 4px; }
   .controls .btn { flex: 1; justify-content: center; }
-  .log-wrap { height: 260px; }
+  .btn { min-height: 38px; }
+  .panel-header .btn { min-height: 34px; }
+  .log-wrap { height: 280px; }
+  /* 16px stops iOS Safari zooming the page when a field is focused */
+  input, select, textarea, .field input, .field select, .field textarea, .game-delay-input { font-size: 16px !important; }
   #global-tip { max-width: 220px !important; }
 }
 @media (max-width: 430px) {
@@ -231,8 +248,9 @@ input[type="number"] { -moz-appearance: textfield; }
     </button>
     <span class="logo">NHL <span>Goal Light</span></span>
     <div class="header-right">
+      <span class="save-state" id="save-state"></span>
       <span class="status-pill" id="status-pill">Idle</span>
-      <button class="icon-btn" id="theme-btn" title="Toggle theme">🌙</button>
+      <button class="icon-btn" id="theme-btn" title="Toggle theme" aria-label="Toggle theme">🌙</button>
     </div>
   </header>
 
@@ -242,71 +260,66 @@ input[type="number"] { -moz-appearance: textfield; }
 
     <!-- Bulbs -->
     <div class="sidebar-section">
-      <div class="section-label">Bulbs <span class="section-dirty" id="dirty-bulbs"></span></div>
+      <div class="section-label">Bulbs</div>
       <div class="field">
-        <label>IP Addresses <span class="tip" data-tip="One IP per line. All bulbs flash simultaneously on a goal.">?</span></label>
+        <label>IP Addresses <span class="tip" data-tip="One IP per line. All bulbs flash together. Saved automatically.">?</span></label>
         <textarea id="bulb-ips" rows="3" placeholder="192.168.x.x&#10;192.168.x.y"></textarea>
       </div>
       <button class="btn" id="test-btn" style="width:100%;justify-content:center">Test Connection</button>
       <div class="bulb-status" id="bulb-status"><div class="dot"></div><span id="bulb-status-text">Not tested</span></div>
-      <button class="btn btn-apply" data-apply="bulbs">Apply</button>
     </div>
 
     <!-- Teams & Delay -->
     <div class="sidebar-section">
-      <div class="section-label">Teams &amp; Delay <span class="section-dirty" id="dirty-teams"></span></div>
+      <div class="section-label">Teams &amp; Delay</div>
       <div class="field">
-        <label>Primary team <span class="tip" data-tip="Games involving this team use the primary-team delay below and are listed first.">?</span></label>
+        <label>Primary team <span class="tip" data-tip="Games involving this team use the primary-team delay and are listed first.">?</span></label>
         <select id="primary_team"></select>
       </div>
       <div class="field">
         <label>Primary team delay (s) <span class="tip" data-tip="TV delay for any game involving your primary team.">?</span></label>
-        <input type="number" id="primary_delay_seconds" value="35" min="0" step="1" />
+        <input type="number" id="primary_delay_seconds" inputmode="decimal" min="0" step="1" />
       </div>
       <div class="field">
-        <label>All other teams (s) <span class="tip" data-tip="Default TV delay for every other game. You can still override a single game in the list.">?</span></label>
-        <input type="number" id="default_delay_seconds" value="45" min="0" step="1" />
+        <label>All other teams (s) <span class="tip" data-tip="Default TV delay for every other game. A single game can be overridden in the list.">?</span></label>
+        <input type="number" id="default_delay_seconds" inputmode="decimal" min="0" step="1" />
       </div>
-      <button class="btn btn-apply" data-apply="teams">Apply</button>
     </div>
 
     <!-- Flash -->
     <div class="sidebar-section">
-      <div class="section-label">Flash <span class="section-dirty" id="dirty-flash"></span></div>
-      <div class="field"><label>Duration (s) <span class="tip" data-tip="How long the bulb flashes after a goal.">?</span></label><input type="number" id="flash_duration" value="12" min="1" step="1" /></div>
-      <div class="field"><label>Interval (s) <span class="tip" data-tip="How fast the bulb alternates colors. Lower = faster strobe.">?</span></label><input type="number" id="flash_interval" value="0.45" min="0.05" step="0.05" /></div>
-      <div class="field"><label>Quiet window (s) <span class="tip" data-tip="After flashing, waits this long for burst goals before restoring.">?</span></label><input type="number" id="flash_quiet_window" value="1.5" min="0" step="0.1" /></div>
-      <div class="field"><label>Transition (ms) <span class="tip" data-tip="Fade time between colors. 0 = instant snap.">?</span></label><input type="number" id="flash_transition_ms" value="0" min="0" step="10" /></div>
-      <button class="btn btn-apply" data-apply="flash">Apply</button>
+      <div class="section-label">Flash</div>
+      <div class="field"><label>Duration (s) <span class="tip" data-tip="How long the bulb flashes after a goal.">?</span></label><input type="number" id="flash_duration" inputmode="decimal" min="1" step="1" /></div>
+      <div class="field"><label>Beat (s) <span class="tip" data-tip="One beat of every team's rhythm. Lower = faster. Colour changes are paced evenly even when the bulb is slow.">?</span></label><input type="number" id="flash_interval" inputmode="decimal" min="0.1" step="0.05" /></div>
+      <div class="field"><label>Quiet window (s) <span class="tip" data-tip="After flashing, waits this long for burst goals before restoring.">?</span></label><input type="number" id="flash_quiet_window" inputmode="decimal" min="0" step="0.1" /></div>
+      <div class="field"><label>Transition (ms) <span class="tip" data-tip="Fade time between colors. 0 = instant snap.">?</span></label><input type="number" id="flash_transition_ms" inputmode="numeric" min="0" step="10" /></div>
     </div>
 
     <!-- Polling -->
     <div class="sidebar-section">
-      <div class="section-label">Polling <span class="section-dirty" id="dirty-polling"></span></div>
-      <div class="field"><label>Live (s) <span class="tip" data-tip="How often the NHL API is polled during a live game.">?</span></label><input type="number" id="poll_live_seconds" value="1.0" min="0.1" step="0.1" /></div>
-      <div class="field"><label>Critical (s) <span class="tip" data-tip="Poll interval in the final minute of a period.">?</span></label><input type="number" id="poll_critical_seconds" value="0.75" min="0.1" step="0.05" /></div>
-      <div class="field"><label>Pregame (s) <span class="tip" data-tip="Poll interval before puck drop.">?</span></label><input type="number" id="poll_pregame_seconds" value="10" min="1" step="1" /></div>
-      <div class="field"><label>Error (s) <span class="tip" data-tip="Wait before retrying after a failed request.">?</span></label><input type="number" id="poll_error_seconds" value="5" min="1" step="1" /></div>
-      <button class="btn btn-apply" data-apply="polling">Apply</button>
+      <div class="section-label">Polling</div>
+      <div class="field"><label>Live (s) <span class="tip" data-tip="How often the NHL API is polled during a live game.">?</span></label><input type="number" id="poll_live_seconds" inputmode="decimal" min="0.1" step="0.1" /></div>
+      <div class="field"><label>Critical (s) <span class="tip" data-tip="Poll interval in the final minute of a period.">?</span></label><input type="number" id="poll_critical_seconds" inputmode="decimal" min="0.1" step="0.05" /></div>
+      <div class="field"><label>Pregame (s) <span class="tip" data-tip="Poll interval before puck drop.">?</span></label><input type="number" id="poll_pregame_seconds" inputmode="decimal" min="1" step="1" /></div>
+      <div class="field"><label>Error (s) <span class="tip" data-tip="Wait before retrying after a failed request.">?</span></label><input type="number" id="poll_error_seconds" inputmode="decimal" min="1" step="1" /></div>
     </div>
 
     <!-- Network -->
     <div class="sidebar-section">
-      <div class="section-label">Network <span class="section-dirty" id="dirty-network"></span></div>
-      <div class="field"><label>Request timeout (s) <span class="tip" data-tip="Max wait for NHL API response before treating as failed.">?</span></label><input type="number" id="request_timeout" value="10" min="1" step="1" /></div>
-      <div class="field"><label>Max retries <span class="tip" data-tip="Times to retry a failed NHL API request.">?</span></label><input type="number" id="max_retries" value="4" min="0" step="1" /></div>
-      <div class="field"><label>Backoff base (s) <span class="tip" data-tip="Starting backoff wait. Doubles each retry up to Backoff max.">?</span></label><input type="number" id="backoff_base" value="1.0" min="0.1" step="0.1" /></div>
-      <div class="field"><label>Backoff max (s) <span class="tip" data-tip="Max backoff cap between retries.">?</span></label><input type="number" id="backoff_max" value="30.0" min="1" step="1" /></div>
-      <button class="btn btn-apply" data-apply="network">Apply</button>
+      <div class="section-label">Network</div>
+      <div class="field"><label>Request timeout (s) <span class="tip" data-tip="Max wait for NHL API response before treating as failed.">?</span></label><input type="number" id="request_timeout" inputmode="decimal" min="1" step="1" /></div>
+      <div class="field"><label>Max retries <span class="tip" data-tip="Times to retry a failed NHL API request.">?</span></label><input type="number" id="max_retries" inputmode="numeric" min="0" step="1" /></div>
+      <div class="field"><label>Backoff base (s) <span class="tip" data-tip="Starting backoff wait. Doubles each retry up to Backoff max.">?</span></label><input type="number" id="backoff_base" inputmode="decimal" min="0.1" step="0.1" /></div>
+      <div class="field"><label>Backoff max (s) <span class="tip" data-tip="Max backoff cap between retries.">?</span></label><input type="number" id="backoff_max" inputmode="decimal" min="1" step="1" /></div>
     </div>
 
     <!-- Timing -->
     <div class="sidebar-section">
-      <div class="section-label">Timing <span class="section-dirty" id="dirty-timing"></span></div>
-      <div class="field"><label>Pregame buffer (s) <span class="tip" data-tip="Seconds before puck drop to start polling. Default 300 = 5 min early.">?</span></label><input type="number" id="pregame_buffer_seconds" value="300" min="0" step="30" /></div>
-      <div class="field"><label>Restore transition (ms) <span class="tip" data-tip="Fade time back to original color after flash.">?</span></label><input type="number" id="restore_transition_ms" value="150" min="0" step="10" /></div>
-      <button class="btn btn-apply" data-apply="timing">Apply</button>
+      <div class="section-label">Timing</div>
+      <div class="field"><label>Pregame buffer (s) <span class="tip" data-tip="Seconds before puck drop to start polling. 300 = 5 min early.">?</span></label><input type="number" id="pregame_buffer_seconds" inputmode="numeric" min="0" step="30" /></div>
+      <div class="field"><label>Restore transition (ms) <span class="tip" data-tip="Fade time back to your original color after a flash.">?</span></label><input type="number" id="restore_transition_ms" inputmode="numeric" min="0" step="10" /></div>
     </div>
+    <p class="sidebar-note">Every change is saved and applied instantly.</p>
   </aside>
 
   <main class="main">
@@ -315,8 +328,8 @@ input[type="number"] { -moz-appearance: textfield; }
       <div class="panel-header">
         <span>Today's Games</span>
         <div class="panel-header-actions">
-          <button class="btn" id="select-all-btn">Select All</button>
-          <button class="btn" id="deselect-all-btn">Deselect All</button>
+          <button class="btn" id="select-all-btn">Track All</button>
+          <button class="btn" id="deselect-all-btn">Mute All</button>
           <button class="btn" id="reset-delays-btn" title="Clear per-game delay overrides">Reset delays</button>
           <button class="btn" id="refresh-games-btn">↻ Refresh</button>
         </div>
@@ -325,7 +338,7 @@ input[type="number"] { -moz-appearance: textfield; }
       <div class="games-hint" id="games-hint"></div>
     </div>
 
-    <div class="panel" style="flex:1;display:flex;flex-direction:column;">
+    <div class="panel grow">
       <div class="panel-header">
         <span>Live Log</span>
         <div class="panel-header-actions">
@@ -338,20 +351,21 @@ input[type="number"] { -moz-appearance: textfield; }
         <label class="autoscroll-label"><input type="checkbox" id="autoscroll" checked /> Auto-scroll</label>
       </div>
       <div class="controls">
-        <button class="btn btn-primary" id="start-btn">▶ Start Monitoring</button>
-        <button class="btn btn-danger" id="stop-btn" disabled>■ Stop</button>
-        <span class="run-hint" id="run-hint" style="display:none">Settings &amp; delays are read at start — stop and start again to apply changes.</span>
+        <button class="btn btn-primary" id="start-btn">▶ Resume</button>
+        <button class="btn btn-danger" id="stop-btn">■ Pause</button>
+        <span class="run-hint" id="run-hint">Runs automatically — tracks every game, every day.</span>
       </div>
     </div>
 
     <div class="panel">
       <div class="panel-header"><span>Simulate Goal</span></div>
       <div class="simulate-body">
-        <div class="field" style="margin:0;flex:1;min-width:120px">
+        <div class="field" style="margin:0;flex:1;min-width:150px">
           <select id="sim-team"><option value="">— Pick a team —</option></select>
         </div>
         <button class="btn btn-primary" id="sim-btn">⚡ Fire</button>
       </div>
+      <div class="sim-style" id="sim-style"></div>
       <div class="simulate-result" id="sim-result"></div>
     </div>
   </main>
@@ -363,33 +377,30 @@ input[type="number"] { -moz-appearance: textfield; }
 "use strict";
 
 const $ = id => document.getElementById(id);
-const DEFAULT_PRIMARY = "MTL";
 const MAX_LOG_LINES = 2000;
-
-/* Settings that live in the sidebar, grouped by Apply-button section. */
-const SECTION_FIELDS = {
-  bulbs:   ["bulb-ips"],
-  teams:   ["primary_team", "primary_delay_seconds", "default_delay_seconds"],
-  flash:   ["flash_duration", "flash_interval", "flash_quiet_window", "flash_transition_ms"],
-  polling: ["poll_live_seconds", "poll_critical_seconds", "poll_pregame_seconds", "poll_error_seconds"],
-  network: ["request_timeout", "max_retries", "backoff_base", "backoff_max"],
-  timing:  ["pregame_buffer_seconds", "restore_transition_ms"],
-};
-/* Numeric fields sent to /api/start under the same names. */
-const NUMERIC_FIELDS = Object.entries(SECTION_FIELDS)
-  .filter(([s]) => s !== "bulbs").flatMap(([, f]) => f).filter(id => id !== "primary_team");
-
-const SETTINGS_KEY = "nhl_settings_v3";
 const THEME_KEY = "nhl_theme";
+
+/* Sidebar fields that map 1:1 to server settings (id === setting name). */
+const NUMBER_FIELDS = [
+  "primary_delay_seconds", "default_delay_seconds",
+  "flash_duration", "flash_interval", "flash_quiet_window", "flash_transition_ms",
+  "poll_live_seconds", "poll_critical_seconds", "poll_pregame_seconds", "poll_error_seconds",
+  "request_timeout", "max_retries", "backoff_base", "backoff_max",
+  "pregame_buffer_seconds", "restore_transition_ms",
+];
+const PATTERN_LABELS = {
+  "alt": "even alternate", "slow": "slow even", "gallop": "long A · short B", "rev-gallop": "short A · long B",
+  "double-tap": "A–A–B tap", "white-tick": "white between colours", "dark-gap": "dark flicker",
+  "heartbeat": "two beats + rest", "tri-color": "three-colour cycle", "a-heavy": "mostly A", "b-heavy": "mostly B",
+};
 
 const state = {
   games: [],
-  selected: new Set(),     // checked game ids
-  manual: {},              // per-game delay overrides {id: seconds}
-  clocks: {},              // cached live-clock text {id: {text, cls}}
-  teams: {},               // {abbrev: {name, primary, secondary}}
-  monitoring: false,
-  firstLoad: true,
+  muted: new Set(),      // game ids that will NOT flash (everything else is tracked)
+  manual: {},            // per-game delay overrides {id: seconds}
+  clocks: {},            // cached live-clock text {id: {text, cls}}
+  teams: {},             // {abbrev: {name, a, b, c, pattern}}
+  enabled: true,
 };
 
 const statusPill = $("status-pill"), startBtn = $("start-btn"), stopBtn = $("stop-btn");
@@ -401,71 +412,82 @@ const sidebar = $("sidebar"), overlay = $("sidebar-overlay"), tooltip = $("globa
 const num = (id, fallback) => { const v = parseFloat($(id).value); return Number.isFinite(v) ? v : fallback; };
 const teamName = a => (state.teams[a] && state.teams[a].name) || a;
 
-/* ── Settings persistence ───────────────────────────────────────────────── */
-function saveSettings() {
-  const obj = {};
-  Object.values(SECTION_FIELDS).flat().forEach(id => { obj[id] = $(id).value; });
-  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(obj)); } catch (_) {}
+/* ── Instant-apply settings ─────────────────────────────────────────────────
+   Every edit is queued, debounced, saved to the server (settings.json) and
+   pushed straight into the running monitor — nothing to start, stop or apply. */
+let _patch = {}, _saveTimer = null, _saveFade = null;
+
+function setSaveState(cls, text) {
+  const el = $("save-state"); el.className = "save-state " + cls; el.textContent = text;
+  clearTimeout(_saveFade);
+  if (cls === "saved") _saveFade = setTimeout(() => { el.textContent = ""; }, 1800);
 }
-function loadSettings() {
-  let saved = null;
-  try { saved = JSON.parse(localStorage.getItem(SETTINGS_KEY) || "null"); } catch (_) {}
-  if (!saved) {                                   // migrate bulb IPs from the previous version
-    try {
-      const old = JSON.parse(localStorage.getItem("nhl_settings_v2") || "null");
-      if (old) saved = { ...old, "bulb-ips": old.bulb_ips };
-    } catch (_) {}
-  }
-  if (!saved) return;
-  Object.values(SECTION_FIELDS).flat().forEach(id => {
-    if (saved[id] === undefined || saved[id] === null) return;
-    if (id === "primary_team" && !state.teams[saved[id]]) return;
-    $(id).value = saved[id];
-  });
+function queueSave(obj, delay = 500) {
+  Object.assign(_patch, obj);
+  clearTimeout(_saveTimer);
+  setSaveState("saving", "Saving…");
+  _saveTimer = setTimeout(flushSave, delay);
+}
+async function flushSave() {
+  clearTimeout(_saveTimer);
+  if (!Object.keys(_patch).length) return;
+  const body = _patch; _patch = {};
+  try {
+    const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json();
+    if (!r.ok) {
+      setSaveState("error", "Rejected");
+      appendLog(`ERROR: ${d.error || r.status}`, "error");
+      await loadSettings();                 // snap fields back to the saved values
+    } else {
+      setSaveState("saved", "Saved ✓");
+      if (d.error) appendLog(`ERROR: ${d.error}`, "error");
+    }
+  } catch (e) { setSaveState("error", "Offline"); }
+  pollStatus();
 }
 
-/* ── Apply-button system ────────────────────────────────────────────────── */
-function markSectionDirty(section) {
-  const dot = $(`dirty-${section}`); if (dot) dot.classList.add("visible");
-  const btn = document.querySelector(`[data-apply="${section}"]`);
-  if (btn) { btn.classList.add("has-changes"); btn.classList.remove("applied"); btn.textContent = "Apply"; }
-  SECTION_FIELDS[section].forEach(id => $(id).classList.add("pending"));
+function applySettingsToUi(s) {
+  NUMBER_FIELDS.forEach(id => { if (document.activeElement !== $(id) && s[id] !== undefined) $(id).value = s[id]; });
+  if (document.activeElement !== $("bulb-ips")) $("bulb-ips").value = (s.bulb_ips || []).join("\n");
+  if (s.primary_team && state.teams[s.primary_team]) primarySel.value = s.primary_team;
+  state.muted = new Set((s.muted_games || []).map(Number));
+  state.manual = {};
+  Object.entries(s.game_delays || {}).forEach(([k, v]) => { state.manual[k] = Number(v); });
+  state.enabled = s.enabled !== false;
 }
-function applySection(section, quiet = false) {
-  saveSettings();
-  const dot = $(`dirty-${section}`); if (dot) dot.classList.remove("visible");
-  const btn = document.querySelector(`[data-apply="${section}"]`);
-  if (btn) {
-    btn.classList.remove("has-changes");
-    if (!quiet) {
-      btn.classList.add("applied"); btn.textContent = "✓ Applied";
-      setTimeout(() => { btn.classList.remove("applied"); btn.textContent = "Apply"; }, 1800);
-    }
-  }
-  SECTION_FIELDS[section].forEach(id => $(id).classList.remove("pending"));
-  if (section === "teams") renderGames();         // delays / ordering depend on these
+async function loadSettings() {
+  try {
+    const d = await (await fetch("/api/settings")).json();
+    applySettingsToUi(d.settings);
+    return d.settings;
+  } catch (_) { return null; }
 }
-function applyAll() { Object.keys(SECTION_FIELDS).forEach(s => applySection(s, true)); }
 
 function attachSettingsHandlers() {
-  Object.entries(SECTION_FIELDS).forEach(([section, ids]) => {
-    ids.forEach(id => {
-      const el = $(id);
-      el.addEventListener("input", () => markSectionDirty(section));
-      el.addEventListener("change", () => markSectionDirty(section));
+  NUMBER_FIELDS.forEach(id => {
+    $(id).addEventListener("input", () => {
+      const v = parseFloat($(id).value);
+      if (!Number.isFinite(v) || v < 0) return;           // ignore half-typed values
+      queueSave({ [id]: v });
+      if (id === "primary_delay_seconds" || id === "default_delay_seconds") renderGames();
     });
   });
-  document.querySelectorAll("[data-apply]").forEach(b => b.addEventListener("click", () => applySection(b.dataset.apply)));
+  primarySel.addEventListener("change", () => { queueSave({ primary_team: primarySel.value }, 150); renderGames(); });
+  $("bulb-ips").addEventListener("input", () => queueSave({ bulb_ips: getBulbIps() }, 900));
 }
 
 /* ── Drawer / tooltip / theme ───────────────────────────────────────────── */
-const openDrawer = () => { sidebar.classList.add("open"); overlay.classList.add("open"); };
-const closeDrawer = () => { sidebar.classList.remove("open"); overlay.classList.remove("open"); };
-$("menu-btn").addEventListener("click", () => sidebar.classList.contains("open") ? closeDrawer() : openDrawer());
-overlay.addEventListener("click", closeDrawer);
+function setDrawer(open) {
+  sidebar.classList.toggle("open", open);
+  overlay.classList.toggle("open", open);
+  document.body.classList.toggle("lock", open && window.matchMedia("(max-width: 680px)").matches);
+}
+$("menu-btn").addEventListener("click", () => setDrawer(!sidebar.classList.contains("open")));
+overlay.addEventListener("click", () => setDrawer(false));
 
 document.querySelectorAll(".tip").forEach(el => {
-  el.addEventListener("mouseenter", () => {
+  const show = () => {
     tooltip.textContent = el.dataset.tip || "";
     const r = el.getBoundingClientRect();
     if (window.innerWidth - r.right > 212) {
@@ -474,8 +496,11 @@ document.querySelectorAll(".tip").forEach(el => {
       tooltip.style.top = (r.bottom + 6) + "px"; tooltip.style.left = Math.max(8, r.left - 40) + "px";
     }
     tooltip.style.opacity = "1";
-  });
-  el.addEventListener("mouseleave", () => { tooltip.style.opacity = "0"; });
+  };
+  const hide = () => { tooltip.style.opacity = "0"; };
+  el.addEventListener("mouseenter", show);
+  el.addEventListener("mouseleave", hide);
+  el.addEventListener("click", e => { e.preventDefault(); show(); setTimeout(hide, 2500); });   // touch devices
 });
 
 function setTheme(t) {
@@ -545,18 +570,16 @@ testBtn.addEventListener("click", async () => {
   testBtn.disabled = false;
 });
 
-/* ── Teams / colours ────────────────────────────────────────────────────── */
-function hsvToHex(h, s, v) {
-  s /= 100; v /= 100;
-  const f = n => { const k = (n + h / 60) % 6; return v - v * s * Math.max(0, Math.min(k, 4 - k, 1)); };
-  const x = n => Math.round(f(n) * 255).toString(16).padStart(2, "0");
-  return `#${x(5)}${x(3)}${x(1)}`;
-}
-function makeSwatch([h, s, v]) {
+/* ── Teams ──────────────────────────────────────────────────────────────── */
+function makeSwatch(hex) {
   const el = document.createElement("div");
-  el.className = "swatch";
-  el.style.background = (v === 0 && s === 0) ? "#111" : hsvToHex(h, s, v);
+  el.className = "swatch"; el.style.background = hex;
   return el;
+}
+function teamSwatches(abbrev) {
+  const t = state.teams[abbrev], out = [];
+  if (t) { out.push(makeSwatch(t.a), makeSwatch(t.b)); if (t.c) out.push(makeSwatch(t.c)); }
+  return out;
 }
 async function loadTeams() {
   try { state.teams = await (await fetch("/api/team-colors")).json(); } catch (_) { state.teams = {}; }
@@ -565,8 +588,13 @@ async function loadTeams() {
     const label = `${teamName(a)} (${a})`;
     [primarySel, simTeam].forEach(sel => { const o = document.createElement("option"); o.value = a; o.textContent = label; sel.appendChild(o); });
   });
-  if (state.teams[DEFAULT_PRIMARY]) primarySel.value = DEFAULT_PRIMARY;
 }
+simTeam.addEventListener("change", () => {
+  const box = $("sim-style"); box.innerHTML = "";
+  const t = state.teams[simTeam.value]; if (!t) return;
+  teamSwatches(simTeam.value).forEach(s => box.appendChild(s));
+  box.appendChild(document.createTextNode(`Rhythm: ${PATTERN_LABELS[t.pattern] || t.pattern}`));
+});
 
 /* ── Games ──────────────────────────────────────────────────────────────── */
 const isPrimaryGame = g => g.away_abbrev === primarySel.value || g.home_abbrev === primarySel.value;
@@ -577,40 +605,47 @@ const isFinal = s => s === "FINAL" || s === "OFF";
 const fmtTime = iso => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
 function updateGamesHint() {
-  const p = primarySel.value;
   $("games-hint").textContent =
-    `★ ${teamName(p)} games use ${num("primary_delay_seconds", 35)}s · all other games ${num("default_delay_seconds", 45)}s. ` +
-    `Edit a delay to override it for that game (highlighted).`;
+    `★ ${teamName(primarySel.value)} games use ${num("primary_delay_seconds", 35)}s · all other games ${num("default_delay_seconds", 45)}s. ` +
+    `Every game is tracked — untick one to mute it. Edit a delay to override that game (yellow). Changes apply instantly.`;
 }
 
 function renderGames() {
+  const a = document.activeElement;
+  if (a && a.classList && a.classList.contains("game-delay-input")) return;   // don't steal focus mid-typing
   gameList.innerHTML = "";
   updateGamesHint();
   if (!state.games.length) { gameList.innerHTML = '<li class="games-empty">No games scheduled today.</li>'; return; }
 
-  const sorted = [...state.games].sort((a, b) =>
-    (isPrimaryGame(b) - isPrimaryGame(a)) || a.start_time_utc.localeCompare(b.start_time_utc));
+  const sorted = [...state.games].sort((x, y) =>
+    (isPrimaryGame(y) - isPrimaryGame(x)) || x.start_time_utc.localeCompare(y.start_time_utc));
 
   sorted.forEach(g => {
     const li = document.createElement("li");
-    li.className = "game-row" + (isPrimaryGame(g) ? " primary" : "");
+    const muted = state.muted.has(g.id);
+    li.className = "game-row" + (isPrimaryGame(g) ? " primary" : "") + (muted ? " muted" : "");
 
     const cb = document.createElement("input");
-    cb.type = "checkbox"; cb.dataset.gameId = g.id; cb.checked = state.selected.has(g.id);
-    cb.addEventListener("change", () => { cb.checked ? state.selected.add(g.id) : state.selected.delete(g.id); });
+    cb.type = "checkbox"; cb.checked = !muted; cb.setAttribute("aria-label", "Track this game");
+    cb.addEventListener("change", () => {
+      cb.checked ? state.muted.delete(g.id) : state.muted.add(g.id);
+      li.classList.toggle("muted", !cb.checked);
+      queueSave({ muted_games: [...state.muted] }, 200);
+    });
 
     const matchup = document.createElement("span");
     matchup.className = "game-matchup";
     matchup.textContent = `${g.away_abbrev} @ ${g.home_abbrev}`;
     matchup.title = `${g.away_name} at ${g.home_name}`;
-    matchup.addEventListener("click", () => { if (!cb.disabled) { cb.checked = !cb.checked; cb.dispatchEvent(new Event("change")); } });
+    matchup.addEventListener("click", () => { cb.checked = !cb.checked; cb.dispatchEvent(new Event("change")); });
 
     const swatches = document.createElement("div");
     swatches.className = "team-swatches";
-    const ac = state.teams[g.away_abbrev], hc = state.teams[g.home_abbrev];
-    if (ac) { swatches.append(makeSwatch(ac.primary), makeSwatch(ac.secondary)); }
-    if (ac && hc) { const sep = document.createElement("div"); sep.className = "swatch-sep"; swatches.appendChild(sep); }
-    if (hc) { swatches.append(makeSwatch(hc.primary), makeSwatch(hc.secondary)); }
+    teamSwatches(g.away_abbrev).forEach(s => swatches.appendChild(s));
+    if (state.teams[g.away_abbrev] && state.teams[g.home_abbrev]) { const sep = document.createElement("div"); sep.className = "swatch-sep"; swatches.appendChild(sep); }
+    teamSwatches(g.home_abbrev).forEach(s => swatches.appendChild(s));
+    const pa = state.teams[g.away_abbrev], ph = state.teams[g.home_abbrev];
+    if (pa && ph) swatches.title = `${g.away_abbrev}: ${PATTERN_LABELS[pa.pattern]} · ${g.home_abbrev}: ${PATTERN_LABELS[ph.pattern]}`;
 
     const time = document.createElement("span");
     time.className = "game-time"; time.textContent = fmtTime(g.start_time_utc);
@@ -627,14 +662,15 @@ function renderGames() {
     const wrap = document.createElement("div");
     wrap.className = "game-delay-wrap";
     const inp = document.createElement("input");
-    inp.type = "number"; inp.min = "0"; inp.step = "1"; inp.className = "game-delay-input";
-    inp.dataset.gameId = g.id; inp.value = delayFor(g);
+    inp.type = "number"; inp.min = "0"; inp.step = "1"; inp.inputMode = "decimal"; inp.className = "game-delay-input";
+    inp.value = delayFor(g);
     inp.title = (g.id in state.manual) ? "Custom delay for this game" : "Default delay for this game";
     inp.classList.toggle("manual", g.id in state.manual);
     inp.addEventListener("input", () => {
       const v = parseFloat(inp.value);
       if (Number.isFinite(v) && v >= 0) state.manual[g.id] = v; else delete state.manual[g.id];
       inp.classList.toggle("manual", g.id in state.manual);
+      queueSave({ game_delays: state.manual }, 600);
     });
     wrap.append(inp, document.createTextNode("s"));
 
@@ -643,7 +679,6 @@ function renderGames() {
     li.append(matchup, swatches, time, badge, clock, wrap);
     gameList.appendChild(li);
   });
-  applyMonitoringLock();
 }
 
 async function loadGames(force = false) {
@@ -652,10 +687,6 @@ async function loadGames(force = false) {
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
     state.games = d;
-    if (state.firstLoad) {                     // pre-tick primary-team games on first load
-      state.games.forEach(g => { if (isPrimaryGame(g) && !isFinal(g.game_state)) state.selected.add(g.id); });
-      state.firstLoad = false;
-    }
     renderGames();
     refreshLiveClocks();
   } catch (e) {
@@ -684,57 +715,44 @@ async function refreshLiveClocks() {
 }
 
 $("select-all-btn").addEventListener("click", () => {
-  state.games.forEach(g => state.selected.add(g.id));
-  gameList.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = true);
+  state.games.forEach(g => state.muted.delete(g.id));
+  queueSave({ muted_games: [...state.muted] }, 100); renderGames();
 });
 $("deselect-all-btn").addEventListener("click", () => {
-  state.selected.clear();
-  gameList.querySelectorAll('input[type="checkbox"]').forEach(c => c.checked = false);
+  state.games.forEach(g => state.muted.add(g.id));
+  queueSave({ muted_games: [...state.muted] }, 100); renderGames();
 });
-$("reset-delays-btn").addEventListener("click", () => { state.manual = {}; renderGames(); });
+$("reset-delays-btn").addEventListener("click", () => {
+  state.manual = {}; queueSave({ game_delays: {} }, 100); renderGames();
+});
 $("refresh-games-btn").addEventListener("click", () => loadGames(true));
 
-/* ── Monitoring state ───────────────────────────────────────────────────── */
-function applyMonitoringLock() {
-  const on = state.monitoring;
-  gameList.querySelectorAll("input").forEach(i => i.disabled = on);
-  ["select-all-btn", "deselect-all-btn", "reset-delays-btn"].forEach(id => $(id).disabled = on);
-}
-function setMonitoring(on) {
-  state.monitoring = on;
-  statusPill.textContent = on ? "Monitoring" : "Idle";
-  statusPill.classList.toggle("monitoring", on);
-  startBtn.disabled = on; stopBtn.disabled = !on;
-  $("run-hint").style.display = on ? "" : "none";
-  applyMonitoringLock();
-}
+/* ── Run state (monitor starts by itself; these just pause/resume) ──────── */
 async function pollStatus() {
-  try { const d = await (await fetch("/api/status")).json(); setMonitoring(d.state === "monitoring"); } catch (_) {}
+  try {
+    const d = await (await fetch("/api/status")).json();
+    state.enabled = d.enabled;
+    let text = "Idle", cls = "";
+    if (d.state === "monitoring") { text = "Monitoring"; cls = "monitoring"; }
+    else if (d.state === "paused") { text = "Paused"; cls = "warn"; }
+    else if (!d.has_bulbs) { text = "Add a bulb IP"; cls = "warn"; }
+    else { text = "Starting…"; cls = "warn"; }
+    statusPill.textContent = text; statusPill.className = "status-pill " + cls;
+    startBtn.disabled = d.enabled;
+    stopBtn.disabled = !d.enabled;
+    $("run-hint").textContent = d.enabled
+      ? "Runs automatically — tracks every game, every day."
+      : "Paused — no goal lights until you resume.";
+  } catch (_) {}
 }
-
 startBtn.addEventListener("click", async () => {
-  applyAll();
-  const ips = getBulbIps();
-  if (!ips.length) { appendLog("ERROR: enter at least one bulb IP address first.", "error"); openDrawer(); return; }
-
-  const ids = state.games.filter(g => state.selected.has(g.id)).map(g => g.id);
-  if (!ids.length) { appendLog("ERROR: select at least one game first.", "error"); return; }
-
-  const game_delays = {};
-  state.games.forEach(g => { if (state.selected.has(g.id)) game_delays[g.id] = delayFor(g); });
-
-  const body = { bulb_ips: ips, game_ids: ids, game_delays, primary_team: primarySel.value };
-  NUMERIC_FIELDS.forEach(id => { body[id] = $(id).value; });
-
   startBtn.disabled = true;
   try {
-    const r = await fetch("/api/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const d = await r.json();
-    if (!r.ok) appendLog(`ERROR: ${d.error || r.status}`, "error");
+    const r = await fetch("/api/start", { method: "POST" }); const d = await r.json();
+    if (!r.ok) { appendLog(`ERROR: ${d.error || r.status}`, "error"); setDrawer(true); }
   } catch (e) { appendLog(`ERROR: ${e.message}`, "error"); }
   pollStatus();
 });
-
 stopBtn.addEventListener("click", async () => {
   stopBtn.disabled = true;
   try { await fetch("/api/stop", { method: "POST" }); } catch (_) {}
@@ -743,16 +761,15 @@ stopBtn.addEventListener("click", async () => {
 
 /* ── Simulate ───────────────────────────────────────────────────────────── */
 $("sim-btn").addEventListener("click", async () => {
-  const ips = getBulbIps(), team = simTeam.value;
+  const team = simTeam.value;
   const show = (cls, text) => { simResult.className = "simulate-result " + cls; simResult.textContent = text; };
-  if (!ips.length) return show("err", "Enter a bulb IP first.");
+  if (!getBulbIps().length) return show("err", "Enter a bulb IP first.");
   if (!team) return show("err", "Pick a team first.");
   $("sim-btn").disabled = true; show("", `Flashing ${team}…`);
   try {
+    await flushSave();                                   // use the latest values you typed
     const r = await fetch("/api/simulate-goal", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ bulb_ips: ips, team, flash_duration: num("flash_duration", 12),
-                             flash_interval: num("flash_interval", 0.45), flash_transition_ms: num("flash_transition_ms", 0) }),
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ team }),
     });
     const d = await r.json();
     d.ok ? show("ok", "✓ Flash complete.") : show("err", d.error || "Failed.");
@@ -765,17 +782,26 @@ $("sim-btn").addEventListener("click", async () => {
   let theme = "dark"; try { theme = localStorage.getItem(THEME_KEY) || "dark"; } catch (_) {}
   setTheme(theme);
   await loadTeams();
-  loadSettings();
+  const s = await loadSettings();
   attachSettingsHandlers();
+
+  // one-time migration: pick up bulb IPs saved in this browser by the previous version
+  if (s && !(s.bulb_ips || []).length) {
+    try {
+      const old = JSON.parse(localStorage.getItem("nhl_settings_v3") || localStorage.getItem("nhl_settings_v2") || "null");
+      const ips = old && (old["bulb-ips"] || old.bulb_ips);
+      if (ips) { $("bulb-ips").value = ips; queueSave({ bulb_ips: getBulbIps() }, 100); }
+    } catch (_) {}
+  }
+
   initLog();
   await loadGames();
   pollStatus();
+  if (s && !(s.bulb_ips || []).length) setDrawer(true);       // first run: show where to add the bulb
   setInterval(pollStatus, 3000);
-  setInterval(() => {
-    const a = document.activeElement;
-    if (!(a && a.classList && a.classList.contains("game-delay-input"))) loadGames();
-  }, 60000);
+  setInterval(() => loadGames(), 60000);
   setInterval(refreshLiveClocks, 30000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadSettings().then(renderGames); pollStatus(); } });
 })();
 </script>
 </body>

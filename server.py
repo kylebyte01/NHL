@@ -1,9 +1,13 @@
 """
-NHL Goal Light — Flask server + subprocess manager
+NHL Goal Light — Flask server + monitor supervisor
 ===================================================
 
 Run:  python server.py
 Then open http://localhost:5000
+
+The server keeps its settings in settings.json and runs the monitor
+automatically (every game, every day).  Settings changed in the GUI are saved
+and pushed to the running monitor instantly — no stop/start needed.
 
 Dependencies:  pip install -r requirements.txt
 """
@@ -15,6 +19,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections import deque
@@ -46,8 +51,10 @@ except ImportError:  # pragma: no cover
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAIN_SCRIPT = os.path.join(HERE, "main.py")
+SETTINGS_PATH = os.getenv("SETTINGS_FILE", os.path.join(HERE, "settings.json"))
 NHL_API_BASE = main.NHL_API_BASE
 EASTERN_TZ = ZoneInfo("America/New_York")
+RESTART_DELAY = 10.0           # min seconds between monitor (re)starts
 
 # static_folder=None: otherwise /static/<file> would expose the source tree
 app = Flask(__name__, static_folder=None)
@@ -55,6 +62,7 @@ app = Flask(__name__, static_folder=None)
 # ── subprocess state ─────────────────────────────────────────────────────────
 _proc: subprocess.Popen | None = None
 _proc_lock = threading.Lock()
+_last_start = 0.0
 
 # ── log buffer: sequence-numbered so every client/tab gets every line ────────
 MAX_LOG_HISTORY = 2000
@@ -70,15 +78,131 @@ _games_cache_ts = 0.0
 
 _sim_lock = threading.Lock()
 
-# Minimum accepted values (stops a typo from hammering the NHL API / bulb)
-MINIMUMS = {
-    "poll_live_seconds": 0.1, "poll_critical_seconds": 0.1,
-    "poll_pregame_seconds": 1.0, "poll_error_seconds": 1.0,
-    "flash_interval": 0.05, "flash_duration": 1.0, "request_timeout": 1.0,
-}
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Settings (persistent, validated)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _default_settings() -> dict:
+    base = main.AppConfig()
+    s: dict = {
+        "enabled": True,                     # auto-run unless the user pauses it
+        "bulb_ips": [],
+        "primary_team": main.DEFAULT_PRIMARY_TEAM,
+        "muted_games": [],                   # game ids that should NOT flash
+        "game_delays": {},                   # {"gameId": seconds} per-game overrides
+    }
+    for name in main.NUMERIC_ENV_FIELDS:
+        s[name] = getattr(base, name)
+    return s
 
 
-# ── logging helpers ──────────────────────────────────────────────────────────
+def _clean_settings(body: dict, strict: bool = True) -> dict:
+    """Validate a (partial) settings dict. strict=True raises ValueError on bad
+    values (API); strict=False silently drops them (settings file)."""
+    out: dict = {}
+
+    def bad(msg: str) -> None:
+        if strict:
+            raise ValueError(msg)
+
+    for key, (_, cast) in main.NUMERIC_ENV_FIELDS.items():
+        if key not in body or body[key] in (None, ""):
+            continue
+        try:
+            number = cast(str(body[key]))
+        except (TypeError, ValueError):
+            bad(f"Invalid value for {key}: {body[key]!r}")
+            continue
+        if number < 0:
+            bad(f"{key} must not be negative.")
+            continue
+        if number < main.MINIMUMS.get(key, 0):
+            bad(f"{key} must be at least {main.MINIMUMS[key]}.")
+            continue
+        out[key] = number
+
+    if "primary_team" in body:
+        team = str(body["primary_team"] or "").strip().upper()
+        if team in main.TEAM_STYLES:
+            out["primary_team"] = team
+        else:
+            bad(f"Unknown team: {team or '(none)'}")
+
+    if "bulb_ips" in body:
+        out["bulb_ips"] = list(main.parse_bulb_ips(body["bulb_ips"]))
+
+    if "enabled" in body:
+        out["enabled"] = bool(body["enabled"])
+
+    if "muted_games" in body:
+        try:
+            out["muted_games"] = sorted({int(g) for g in (body["muted_games"] or [])})
+        except (TypeError, ValueError):
+            bad("muted_games must be a list of integers.")
+
+    if "game_delays" in body:
+        delays: dict[str, float] = {}
+        raw = body["game_delays"] or {}
+        if isinstance(raw, dict):
+            for gid, value in raw.items():
+                try:
+                    delays[str(int(gid))] = max(0.0, float(value))
+                except (TypeError, ValueError):
+                    bad(f"Invalid delay for game {gid}: {value!r}")
+            out["game_delays"] = delays
+        else:
+            bad("game_delays must be an object.")
+
+    return out
+
+
+_settings_lock = threading.RLock()
+
+
+def _load_settings() -> dict:
+    s = _default_settings()
+    try:
+        with open(SETTINGS_PATH, encoding="utf-8") as f:
+            s.update(_clean_settings(json.load(f), strict=False))
+    except (OSError, ValueError):
+        pass
+    if not s["bulb_ips"]:  # first run: seed from the BULB_IP environment variable
+        s["bulb_ips"] = list(main.parse_bulb_ips(os.getenv("BULB_IP", "")))
+    return s
+
+
+_settings: dict = _load_settings()
+
+
+def _save_settings() -> None:
+    """Atomic write so a crash can never leave a half-written settings file."""
+    with _settings_lock:
+        data = json.dumps(_settings, indent=2)
+    try:
+        fd, tmp = tempfile.mkstemp(dir=os.path.dirname(SETTINGS_PATH), suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(data)
+        os.replace(tmp, SETTINGS_PATH)
+    except OSError as exc:
+        _append_log(f"ERROR: could not save settings: {exc}")
+
+
+def _settings_copy() -> dict:
+    with _settings_lock:
+        return json.loads(json.dumps(_settings))
+
+
+def _live_payload(s: dict) -> dict:
+    """The subset of settings the running monitor understands."""
+    payload = {name: s[name] for name in main.NUMERIC_ENV_FIELDS}
+    payload.update({k: s[k] for k in ("primary_team", "bulb_ips", "muted_games", "game_delays")})
+    return payload
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Log helpers
+# ══════════════════════════════════════════════════════════════════════════════
 
 def _append_log(line: str) -> None:
     global _log_seq
@@ -99,12 +223,62 @@ def _read_stdout(proc: subprocess.Popen) -> None:
         _append_log(f"── monitor process exited (code {code}) ──")
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Monitor process management
+# ══════════════════════════════════════════════════════════════════════════════
+
 def _proc_is_alive() -> bool:
     return _proc is not None and _proc.poll() is None
 
 
-def _stop_proc() -> None:
-    """Caller must hold _proc_lock."""
+def _spawn_env(s: dict) -> dict[str, str]:
+    env = os.environ.copy()
+    for name, (var, _) in main.NUMERIC_ENV_FIELDS.items():
+        env[var] = str(s[name])
+    env.update({
+        "BULB_IP": ",".join(s["bulb_ips"]),
+        "PRIMARY_TEAM": s["primary_team"],
+        "GAME_DELAYS": json.dumps(s["game_delays"]),
+        "MUTED_GAMES": ",".join(str(g) for g in s["muted_games"]),
+        "DAEMON": "1",
+        "PYTHONUNBUFFERED": "1",
+    })
+    env.pop("GAME_IDS", None)
+    return env
+
+
+def _start_proc_locked(s: dict) -> str | None:
+    """Caller holds _proc_lock. Returns an error string or None."""
+    global _proc, _last_start
+    if not s["bulb_ips"]:
+        return "Add at least one bulb IP first."
+    try:
+        _proc = subprocess.Popen(
+            [sys.executable, MAIN_SCRIPT],
+            stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            env=_spawn_env(s), cwd=HERE,
+        )
+    except Exception as exc:
+        _proc = None
+        return f"Failed to start monitor: {exc}"
+    _last_start = time.monotonic()
+    threading.Thread(target=_read_stdout, args=(_proc,), daemon=True).start()
+    return None
+
+
+def _push_config_locked(s: dict) -> None:
+    """Caller holds _proc_lock: send the current settings to the running monitor."""
+    if not _proc_is_alive() or _proc.stdin is None:
+        return
+    try:
+        line = json.dumps({"type": "config", "settings": _live_payload(s)}) + "\n"
+        _proc.stdin.write(line.encode())
+        _proc.stdin.flush()
+    except (BrokenPipeError, OSError, ValueError):
+        pass
+
+
+def _stop_proc_locked() -> None:
     global _proc
     if not _proc_is_alive():
         _proc = None
@@ -119,38 +293,98 @@ def _stop_proc() -> None:
     _proc = None
 
 
+def _reconcile_locked(s: dict, push: bool = True) -> str | None:
+    """Make reality match the settings: run when enabled, stop when not."""
+    if not s["enabled"] or not s["bulb_ips"]:
+        _stop_proc_locked()
+        return None
+    if _proc_is_alive():
+        if push:
+            _push_config_locked(s)
+        return None
+    return _start_proc_locked(s)
+
+
+def _supervisor() -> None:
+    """Keeps the monitor running: starts it on boot and restarts it if it dies."""
+    while True:
+        time.sleep(3)
+        s = _settings_copy()
+        with _proc_lock:
+            if (s["enabled"] and s["bulb_ips"] and not _proc_is_alive()
+                    and time.monotonic() - _last_start >= RESTART_DELAY):
+                _start_proc_locked(s)
+
+
 @atexit.register
 def _cleanup() -> None:
     with _proc_lock:
-        _stop_proc()
+        _stop_proc_locked()
 
 
-# ── request validation ───────────────────────────────────────────────────────
-
-def _build_env(body: dict) -> dict[str, str]:
-    """Validate numeric settings and translate them into environment variables."""
-    env: dict[str, str] = {}
-    for key, (var, cast) in main.NUMERIC_ENV_FIELDS.items():
-        value = body.get(key)
-        if value is None or value == "":
-            continue
-        try:
-            number = cast(str(value))
-        except (TypeError, ValueError):
-            raise ValueError(f"Invalid value for {key}: {value!r}")
-        if number < 0:
-            raise ValueError(f"{key} must not be negative.")
-        if number < MINIMUMS.get(key, 0):
-            raise ValueError(f"{key} must be at least {MINIMUMS[key]}.")
-        env[var] = str(number)
-    return env
-
-
-# ── routes ───────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Routes
+# ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/")
 def index():
     return send_from_directory(HERE, "web.html")
+
+
+@app.route("/api/settings", methods=["GET", "POST"])
+def api_settings():
+    if request.method == "GET":
+        return jsonify({"settings": _settings_copy(), "defaults": _default_settings()})
+
+    body = request.get_json(silent=True) or {}
+    try:
+        patch = _clean_settings(body)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
+    with _settings_lock:
+        _settings.update(patch)
+    _save_settings()
+    s = _settings_copy()
+    with _proc_lock:
+        error = _reconcile_locked(s)
+    return jsonify({"ok": error is None, "error": error, "settings": s})
+
+
+@app.route("/api/start", methods=["POST"])
+def api_start():
+    s = _settings_copy()
+    if not s["bulb_ips"]:
+        return jsonify({"error": "Add at least one bulb IP first."}), 400
+    with _settings_lock:
+        _settings["enabled"] = True
+    _save_settings()
+    with _proc_lock:
+        error = _reconcile_locked(_settings_copy())
+    if error:
+        return jsonify({"error": error}), 500
+    return jsonify({"ok": True})
+
+
+@app.route("/api/stop", methods=["POST"])
+def api_stop():
+    with _settings_lock:
+        _settings["enabled"] = False
+    _save_settings()
+    with _proc_lock:
+        _stop_proc_locked()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/status")
+def api_status():
+    s = _settings_copy()
+    with _proc_lock:
+        alive = _proc_is_alive()
+        pid = _proc.pid if alive else None
+    state = "monitoring" if alive else ("paused" if not s["enabled"] else "idle")
+    return jsonify({"state": state, "pid": pid, "enabled": s["enabled"],
+                    "has_bulbs": bool(s["bulb_ips"])})
 
 
 @app.route("/api/games")
@@ -219,19 +453,9 @@ def api_team_colors():
     return jsonify({
         abbrev: {
             "name": main.TEAM_NAMES.get(abbrev, abbrev),
-            "primary": list(p.primary),
-            "secondary": list(p.secondary),
+            "a": st.a, "b": st.b, "c": st.c, "pattern": st.pattern,
         }
-        for abbrev, p in main.TEAM_COLORS.items()
-    })
-
-
-@app.route("/api/config-defaults")
-def api_config_defaults():
-    return jsonify({
-        "primary_team": main.DEFAULT_PRIMARY_TEAM,
-        "primary_delay_seconds": main.DEFAULT_PRIMARY_DELAY,
-        "default_delay_seconds": main.DEFAULT_OTHER_DELAY,
+        for abbrev, st in main.TEAM_STYLES.items()
     })
 
 
@@ -284,81 +508,6 @@ def api_log():
     )
 
 
-# ── monitor control ──────────────────────────────────────────────────────────
-
-@app.route("/api/start", methods=["POST"])
-def api_start():
-    global _proc
-    body: dict = request.get_json(silent=True) or {}
-
-    ips = main.parse_bulb_ips(body.get("bulb_ips") or body.get("bulb_ip"))
-    if not ips:
-        return jsonify({"error": "At least one bulb IP is required"}), 400
-
-    try:
-        game_ids = [int(g) for g in (body.get("game_ids") or [])]
-    except (TypeError, ValueError):
-        return jsonify({"error": "game_ids must be integers"}), 400
-    if not game_ids:
-        return jsonify({"error": "At least one game_id is required"}), 400
-
-    primary = str(body.get("primary_team") or main.DEFAULT_PRIMARY_TEAM).strip().upper()
-    if primary not in main.TEAM_COLORS:
-        return jsonify({"error": f"Unknown primary team: {primary}"}), 400
-
-    game_delays: dict[str, float] = {}
-    for key, value in (body.get("game_delays") or {}).items():
-        try:
-            game_delays[str(int(key))] = max(0.0, float(value))
-        except (TypeError, ValueError):
-            return jsonify({"error": f"Invalid delay for game {key}: {value!r}"}), 400
-
-    try:
-        env_overrides = _build_env(body)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
-
-    with _proc_lock:
-        if _proc_is_alive():
-            return jsonify({"error": "Already monitoring. Stop first."}), 409
-
-        env = os.environ.copy()
-        env.update(env_overrides)
-        env["BULB_IP"] = ",".join(ips)
-        env["GAME_IDS"] = ",".join(str(g) for g in game_ids)
-        env["PRIMARY_TEAM"] = primary
-        env["GAME_DELAYS"] = json.dumps(game_delays)
-        env["PYTHONUNBUFFERED"] = "1"
-
-        try:
-            _proc = subprocess.Popen(
-                [sys.executable, MAIN_SCRIPT],
-                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                env=env, cwd=HERE,
-            )
-        except Exception as exc:
-            return jsonify({"error": f"Failed to start subprocess: {exc}"}), 500
-
-        threading.Thread(target=_read_stdout, args=(_proc,), daemon=True).start()
-        return jsonify({"ok": True, "pid": _proc.pid})
-
-
-@app.route("/api/stop", methods=["POST"])
-def api_stop():
-    with _proc_lock:
-        was_running = _proc_is_alive()
-        _stop_proc()
-    return jsonify({"ok": True, "message": None if was_running else "No process running"})
-
-
-@app.route("/api/status")
-def api_status():
-    with _proc_lock:
-        alive = _proc_is_alive()
-        pid = _proc.pid if alive else None
-    return jsonify({"state": "monitoring" if alive else "idle", "pid": pid})
-
-
 # ── bulb tools ───────────────────────────────────────────────────────────────
 
 @app.route("/api/test-bulb")
@@ -375,27 +524,25 @@ def api_test_bulb():
 
 @app.route("/api/simulate-goal", methods=["POST"])
 def api_simulate_goal():
+    """Flash a team's colours + rhythm on the saved bulbs, using the saved flash settings."""
     body = request.get_json(silent=True) or {}
-    ips = main.parse_bulb_ips(body.get("bulb_ips") or body.get("ip"))
     team = str(body.get("team") or "").strip().upper()
+    s = _settings_copy()
 
-    if not ips:
-        return jsonify({"ok": False, "error": "No bulb IP provided"}), 400
-    if team not in main.TEAM_COLORS:
+    if not s["bulb_ips"]:
+        return jsonify({"ok": False, "error": "Add a bulb IP first."}), 400
+    if team not in main.TEAM_STYLES:
         return jsonify({"ok": False, "error": f"Unknown team: {team or '(none)'}"}), 400
-    try:
-        duration = min(60.0, max(1.0, float(body.get("flash_duration", 12))))
-        interval = max(0.05, float(body.get("flash_interval", 0.45)))
-        transition = max(0, int(float(body.get("flash_transition_ms", 0))))
-    except (TypeError, ValueError):
-        return jsonify({"ok": False, "error": "Invalid flash settings"}), 400
 
     if not _sim_lock.acquire(blocking=False):
         return jsonify({"ok": False, "error": "A simulation is already running"}), 409
     try:
         config = main.AppConfig(
-            bulb_ips=ips, flash_duration=duration,
-            flash_interval=interval, flash_transition_ms=transition,
+            bulb_ips=tuple(s["bulb_ips"]),
+            flash_duration=min(60.0, float(s["flash_duration"])),
+            flash_interval=float(s["flash_interval"]),
+            flash_transition_ms=int(s["flash_transition_ms"]),
+            restore_transition_ms=int(s["restore_transition_ms"]),
         )
 
         async def _simulate() -> None:
@@ -409,7 +556,7 @@ def api_simulate_goal():
             finally:
                 await bulb.shutdown()
 
-        asyncio.run(asyncio.wait_for(_simulate(), timeout=duration + 30))
+        asyncio.run(asyncio.wait_for(_simulate(), timeout=config.flash_duration + 30))
         return jsonify({"ok": True, "error": None})
     except Exception as exc:
         return jsonify({"ok": False, "error": str(exc) or type(exc).__name__})
@@ -422,5 +569,6 @@ def api_simulate_goal():
 if __name__ == "__main__":
     port = int(os.getenv("SERVER_PORT", "5000"))
     host = os.getenv("SERVER_HOST", "0.0.0.0")
+    threading.Thread(target=_supervisor, name="supervisor", daemon=True).start()
     print(f"NHL Goal Light GUI → http://localhost:{port}")
     app.run(host=host, port=port, debug=False, threaded=True)
