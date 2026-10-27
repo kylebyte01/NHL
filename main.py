@@ -147,7 +147,7 @@ TEAM_STYLES: dict[str, TeamStyle] = {
     "OTT": TeamStyle("#C52032", "#000000", None,      "b-heavy"),     # red, black
     "PHI": TeamStyle("#F74902", "#000000", None,      "gallop"),      # orange, black
     "PIT": TeamStyle("#FCB514", "#000000", None,      "white-tick"),  # gold, black
-    "SJS": TeamStyle("#006D75", "#EA7200", None,      "a-heavy"),  # pacific teal, orange
+    "SJS": TeamStyle("#006D75", "#FFFFFF", None,      "a-heavy"),  # pacific teal, orange
     "SEA": TeamStyle("#99D9D9", "#E9072B", None,      "alt"),         # ice blue, red alert
     "STL": TeamStyle("#002F87", "#FCB514", None,      "gallop"),      # blue, yellow
     "TBL": TeamStyle("#002868", "#FFFFFF", None,      "alt"),         # blue, white
