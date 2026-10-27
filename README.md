@@ -56,7 +56,9 @@ shades (navy, burgundy) so they don't just look black. Teams that look alike on 
 
 Use **Simulate Goal** to preview any team on your bulb. Utah is now the **Utah Mammoth** (UTA).
 
-**Even timing:** each step's hold time is `beats × beat − typical bulb latency`, and the flasher never "catches up" after a slow command, so colours stay evenly spaced even when a bulb stalls.
+**Even timing:** every step sits on a fixed beat timeline. Each colour's command latency is measured separately (bulbs often answer some colours slower than others) and the command is sent that much early, so every colour change lands on the beat and every step lasts its full length. After a stall it never "catches up" with a burst of commands. The log prints `Flash timing on <ip>: A 60ms, B 380ms` after each flash, and warns if your bulb needs longer per command than one beat (then raise **Beat**).
+
+**No default-colour flicker:** flashes use the bulb's native command with `ignore_default` set, so it never flashes its stored default state between steps, and "dark" steps switch the bulb fully off instead of dimming it.
 
 ## Configuration reference
 

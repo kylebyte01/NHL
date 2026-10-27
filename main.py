@@ -32,7 +32,6 @@ import sys
 import statistics
 import threading
 import time
-from collections import deque
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -52,6 +51,8 @@ LIVE_STATES = frozenset({"LIVE", "CRIT"})
 PREGAME_STATES = frozenset({"PRE", "FUT"})
 RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504})
 STALE_SECONDS = 30.0
+LIGHT_SERVICE = "smartlife.iot.smartbulb.lightingservice"
+WHITE_KELVIN = 6500                # what "white" means for a flash step
 SCHEDULE_REFRESH_SECONDS = 600     # daemon re-reads the schedule this often
 GIVE_UP_AFTER = timedelta(hours=4)  # postponed / never-started games
 MIN_STEP_GAP = 0.03                # never hammer a bulb faster than this
@@ -66,7 +67,7 @@ DEFAULT_OTHER_DELAY = 45.0
 # Many teams share colours (five red/black teams, a dozen blue ones), so every
 # team ALSO gets a flash rhythm.  One "beat" = flash_interval seconds.
 #   A / B  = the team's two main colours       W = white
-#   C      = accent colour (falls back to W)   D = dark (bulb dimmed to ~3 %)
+#   C      = accent colour (falls back to W)   D = dark (bulb switched OFF)
 
 PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
     "alt":        (("A", 1), ("B", 1)),                              # even A/B
@@ -104,19 +105,42 @@ def bulb_hsv(hex_color: str) -> tuple[int, int, int]:
 
 
 @dataclass(frozen=True)
+class Shade:
+    """One thing a bulb can be told to show."""
+    kind: str          # "hsv" | "white" | "off"
+    h: int = 0
+    s: int = 0
+    v: int = 100
+
+
+def bulb_shade(hex_color: str) -> Shade:
+    """Brand hex colour -> bulb shade.  Near-black becomes a real OFF (not a dim
+    white, which reads as a white flash) and white/silver uses a white colour
+    temperature instead of 'saturation 0' (which some bulbs render as their
+    default warm colour)."""
+    h, s, v = bulb_hsv(hex_color)
+    if (h, s, v) == (0, 0, 3):
+        return Shade("off")
+    if s == 0 and h == 0:
+        return Shade("white", 0, 0, v)
+    return Shade("hsv", h, s, v)
+
+
+@dataclass(frozen=True)
 class TeamStyle:
     a: str                        # primary colour (hex)
     b: str                        # secondary colour (hex)
     c: Optional[str]              # accent colour (hex) or None
     pattern: str                  # key of PATTERNS
 
-    def palette(self) -> dict[str, tuple[int, int, int]]:
+    def palette(self) -> dict[str, Shade]:
+        white = Shade("white", 0, 0, 100)
         return {
-            "A": bulb_hsv(self.a),
-            "B": bulb_hsv(self.b),
-            "C": bulb_hsv(self.c) if self.c else (0, 0, 100),
-            "W": (0, 0, 100),
-            "D": (0, 0, 3),
+            "A": bulb_shade(self.a),
+            "B": bulb_shade(self.b),
+            "C": bulb_shade(self.c) if self.c else white,
+            "W": white,
+            "D": Shade("off"),
         }
 
     def steps(self) -> tuple[tuple[str, int], ...]:
@@ -147,7 +171,7 @@ TEAM_STYLES: dict[str, TeamStyle] = {
     "OTT": TeamStyle("#C52032", "#000000", None,      "b-heavy"),     # red, black
     "PHI": TeamStyle("#F74902", "#000000", None,      "gallop"),      # orange, black
     "PIT": TeamStyle("#FCB514", "#000000", None,      "white-tick"),  # gold, black
-    "SJS": TeamStyle("#006D75", "#FFFFFF", None,      "a-heavy"),  # pacific teal, orange
+    "SJS": TeamStyle("#006D75", "#EA7200", None,      "a-heavy"),  # pacific teal, orange
     "SEA": TeamStyle("#99D9D9", "#E9072B", None,      "alt"),         # ice blue, red alert
     "STL": TeamStyle("#002F87", "#FCB514", None,      "gallop"),      # blue, yellow
     "TBL": TeamStyle("#002868", "#FFFFFF", None,      "alt"),         # blue, white
@@ -611,6 +635,8 @@ class KasaBulb:
         self._bulb: Optional[IotBulb] = None
         self._light = None
         self._last_update = 0.0
+        self._raw_ok: Optional[bool] = None   # None = untested
+        self._lat: dict[tuple, float] = {}    # measured command time per shade, kept across flashes
         self._lock = asyncio.Lock()
 
     # -- connection management --------------------------------------------
@@ -664,13 +690,52 @@ class KasaBulb:
             except TypeError:
                 await self._light.set_color_temp(ct)
 
-    async def _show(self, hsv: tuple[int, int, int], snap: BulbSnapshot) -> None:
-        h, s, v = hsv
+    async def _transition(self, **state) -> bool:
+        """Send the bulb's native transition_light_state command.
+
+        ignore_default=1 stops the bulb applying its stored 'default' preset
+        first (that preset showed up as a split-second flash of the default
+        colour between steps).  Returns False if the raw command isn't usable
+        here, so callers fall back to the normal python-kasa API."""
+        if self._raw_ok is False:
+            return False
+        try:
+            await self._bulb._query_helper(
+                LIGHT_SERVICE, "transition_light_state",
+                {"ignore_default": 1, "mode": "normal", **state})
+            self._raw_ok = True
+            return True
+        except (asyncio.TimeoutError, OSError):
+            raise                                   # network problem, not unsupported
+        except Exception as exc:
+            if self._raw_ok:                        # worked before -> genuine failure
+                raise
+            self._raw_ok = False
+            log.warning("Bulb %s: native command unavailable (%s) — using the standard API.",
+                        self.ip, exc)
+            return False
+
+    async def _show(self, shade: Shade, snap: BulbSnapshot) -> None:
         ms = self._config.flash_transition_ms
-        if snap.supports_color:
-            await self._set_hsv(h, s, _clamp(v, 1, 100), ms)
-        else:                                   # white-only bulb: rhythm via brightness
-            await self._set_brightness(_clamp(v, 1, 100), ms)
+        v = _clamp(shade.v, 1, 100)
+        if shade.kind == "off":
+            if not await self._transition(on_off=0, transition_period=ms):
+                await self._bulb.turn_off()
+            return
+        if not snap.supports_color:                 # white-only bulb: rhythm via brightness
+            if not await self._transition(on_off=1, brightness=v, transition_period=ms):
+                await self._set_brightness(v, ms)
+            return
+        if shade.kind == "white":
+            ok = await self._transition(on_off=1, color_temp=WHITE_KELVIN, hue=0,
+                                        saturation=0, brightness=v, transition_period=ms)
+            if not ok:
+                await self._set_hsv(0, 0, v, ms)
+            return
+        ok = await self._transition(on_off=1, color_temp=0, hue=shade.h,
+                                    saturation=shade.s, brightness=v, transition_period=ms)
+        if not ok:
+            await self._set_hsv(shade.h, shade.s, v, ms)
 
     # -- public API ---------------------------------------------------------
 
@@ -704,32 +769,44 @@ class KasaBulb:
 
     async def restore(self, snap: BulbSnapshot) -> None:
         cfg = self._config
+        ms = cfg.restore_transition_ms
         async with self._lock:
             try:
                 await self._connect()
                 if not snap.is_on:
-                    await self._bulb.turn_off()
+                    if not await self._transition(on_off=0, transition_period=ms):
+                        await self._bulb.turn_off()
                     return
                 if snap.color_temp:
-                    await self._set_color_temp(snap.color_temp, snap.brightness,
-                                               cfg.restore_transition_ms)
+                    ok = await self._transition(on_off=1, color_temp=snap.color_temp,
+                                                brightness=snap.brightness, transition_period=ms)
+                    if not ok:
+                        await self._set_color_temp(snap.color_temp, snap.brightness, ms)
                 elif snap.supports_color:
-                    await self._set_hsv(snap.hue, snap.saturation, snap.brightness,
-                                        cfg.restore_transition_ms)
+                    ok = await self._transition(on_off=1, color_temp=0, hue=snap.hue,
+                                                saturation=snap.saturation,
+                                                brightness=snap.brightness, transition_period=ms)
+                    if not ok:
+                        await self._set_hsv(snap.hue, snap.saturation, snap.brightness, ms)
                 else:
-                    await self._set_brightness(snap.brightness, cfg.restore_transition_ms)
-                await self._bulb.turn_on()
+                    ok = await self._transition(on_off=1, brightness=snap.brightness,
+                                                transition_period=ms)
+                    if not ok:
+                        await self._set_brightness(snap.brightness, ms)
+                        await self._bulb.turn_on()
             except Exception as exc:
                 log.error("Failed to restore bulb %s (%s) — will reconnect next time.", self.ip, exc)
                 await self._reset()
 
     async def flash(self, style: TeamStyle, snap: BulbSnapshot) -> None:
-        """Play the team's pattern for `flash_duration` seconds.
+        """Play the team's pattern for `flash_duration` seconds with even beats.
 
-        Timing: the hold time of each step is (beats × flash_interval) MINUS the
-        bulb's typical (median) command latency, and we never "catch up" after a slow
-        command.  Catching up fires several commands back-to-back, which makes one
-        colour appear for a few ms and its neighbour for a long time.
+        Every step is given a place on a fixed timeline (one beat = flash_interval).
+        A command takes time to reach the bulb and bulbs answer some colours slower
+        than others, so each colour's latency is measured separately and the command
+        is sent that much early.  The visible colour change then lands on the beat
+        no matter which colour it is.  We never "catch up" after a stall: a step is
+        always shown for at least its full length.
         """
         cfg = self._config
         palette = style.palette()
@@ -737,20 +814,44 @@ class KasaBulb:
         async with self._lock:
             try:
                 await self._connect()
-                await self._bulb.turn_on()
                 loop = asyncio.get_running_loop()
                 end = loop.time() + cfg.flash_duration
-                recent: deque[float] = deque(maxlen=5)   # median ignores one-off stalls
+                lat = self._lat                     # command time per shade; persists between flashes
+                sig = {k: (sh.kind, sh.h, sh.s) for k, sh in palette.items()}
+
+                def est(key: str) -> float:
+                    if sig[key] in lat:
+                        return lat[sig[key]]
+                    return statistics.mean(lat.values()) if lat else 0.0
+
+                grid = loop.time()                  # when the next step should become visible
                 i = 0
-                while loop.time() < end:
+                while grid < end:
                     key, beats = steps[i % len(steps)]
                     i += 1
+                    wait = (grid - est(key) / 2) - loop.time()
+                    if wait > 0:
+                        await asyncio.sleep(wait)
                     t0 = loop.time()
                     await self._show(palette[key], snap)
-                    recent.append(loop.time() - t0)
-                    hold = beats * cfg.flash_interval
-                    await asyncio.sleep(max(MIN_STEP_GAP, hold - statistics.median(recent)))
-                await self._bulb.turn_on()
+                    took = loop.time() - t0
+                    prev = lat.get(sig[key])
+                    # clamp outliers so one stalled reply can't distort later steps
+                    lat[sig[key]] = took if prev is None else 0.6 * prev + 0.4 * min(took, 2 * prev + 0.05)
+                    applied = t0 + lat[sig[key]] / 2     # when the bulb actually changed
+                    grid = max(grid, applied) + beats * cfg.flash_interval
+                # let the final step play out for its full length
+                tail = grid - loop.time()
+                if tail > 0:
+                    await asyncio.sleep(min(tail, 5.0))
+                used = {k: lat[sig[k]] for k in sig if sig[k] in lat and any(k == st[0] for st in steps)}
+                slowest = max(used.values(), default=0.0)
+                log.info("Flash timing on %s: %s", self.ip,
+                         ", ".join(f"{k} {v * 1000:.0f}ms" for k, v in sorted(used.items())))
+                if slowest > cfg.flash_interval:
+                    log.warning("Bulb %s needs ~%.0f ms per command, longer than one beat (%.0f ms) — "
+                                "steps can't be perfectly even; raise Beat to at least %.2f s.",
+                                self.ip, slowest * 1000, cfg.flash_interval * 1000, slowest * 1.2)
             except Exception as exc:
                 log.error("Flash failed on bulb %s (%s) — will reconnect next time.", self.ip, exc)
                 await self._reset()
