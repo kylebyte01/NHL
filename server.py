@@ -83,9 +83,13 @@ _sim_lock = threading.Lock()
 # Settings (persistent, validated)
 # ══════════════════════════════════════════════════════════════════════════════
 
+SETTINGS_VERSION = 2          # v2: primary-team delay default 35s -> 60s
+
+
 def _default_settings() -> dict:
     base = main.AppConfig()
     s: dict = {
+        "settings_version": SETTINGS_VERSION,
         "enabled": True,                     # auto-run unless the user pauses it
         "bulb_ips": [],
         "primary_team": main.DEFAULT_PRIMARY_TEAM,
@@ -164,8 +168,13 @@ def _load_settings() -> dict:
     s = _default_settings()
     try:
         with open(SETTINGS_PATH, encoding="utf-8") as f:
-            s.update(_clean_settings(json.load(f), strict=False))
-    except (OSError, ValueError):
+            raw = json.load(f)
+        s.update(_clean_settings(raw, strict=False))
+        # An old file that still has the previous default (35s) was never customised:
+        # move it to the new default instead of leaving the old number behind.
+        if raw.get("settings_version", 1) < 2 and s["primary_delay_seconds"] == 35.0:
+            s["primary_delay_seconds"] = main.DEFAULT_PRIMARY_DELAY
+    except (OSError, ValueError, AttributeError):
         pass
     if not s["bulb_ips"]:  # first run: seed from the BULB_IP environment variable
         s["bulb_ips"] = list(main.parse_bulb_ips(os.getenv("BULB_IP", "")))
@@ -453,7 +462,7 @@ def api_team_colors():
     return jsonify({
         abbrev: {
             "name": main.TEAM_NAMES.get(abbrev, abbrev),
-            "a": st.a, "b": st.b, "c": st.c, "pattern": st.pattern,
+            "a": st.a, "b": st.b,
         }
         for abbrev, st in main.TEAM_STYLES.items()
     })
@@ -524,7 +533,7 @@ def api_test_bulb():
 
 @app.route("/api/simulate-goal", methods=["POST"])
 def api_simulate_goal():
-    """Flash a team's colours + rhythm on the saved bulbs, using the saved flash settings."""
+    """Flash a team's two colours on the saved bulbs, using the saved flash settings."""
     body = request.get_json(silent=True) or {}
     team = str(body.get("team") or "").strip().upper()
     s = _settings_copy()

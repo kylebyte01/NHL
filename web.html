@@ -290,7 +290,7 @@ input[type="number"] { -moz-appearance: textfield; }
     <div class="sidebar-section">
       <div class="section-label">Flash</div>
       <div class="field"><label>Duration (s) <span class="tip" data-tip="How long the bulb flashes after a goal.">?</span></label><input type="number" id="flash_duration" inputmode="decimal" min="1" step="1" /></div>
-      <div class="field"><label>Beat (s) <span class="tip" data-tip="One beat of every team's rhythm. Lower = faster. Colour changes are paced evenly even when the bulb is slow.">?</span></label><input type="number" id="flash_interval" inputmode="decimal" min="0.1" step="0.05" /></div>
+      <div class="field"><label>Colour time (s) <span class="tip" data-tip="Time each colour is held. If your Wi-Fi/bulb can't keep up it is raised automatically so both colours stay equal.">?</span></label><input type="number" id="flash_interval" inputmode="decimal" min="0.1" step="0.05" /></div>
       <div class="field"><label>Quiet window (s) <span class="tip" data-tip="After flashing, waits this long for burst goals before restoring.">?</span></label><input type="number" id="flash_quiet_window" inputmode="decimal" min="0" step="0.1" /></div>
       <div class="field"><label>Transition (ms) <span class="tip" data-tip="Fade time between colors. 0 = instant snap.">?</span></label><input type="number" id="flash_transition_ms" inputmode="numeric" min="0" step="10" /></div>
     </div>
@@ -388,18 +388,13 @@ const NUMBER_FIELDS = [
   "request_timeout", "max_retries", "backoff_base", "backoff_max",
   "pregame_buffer_seconds", "restore_transition_ms",
 ];
-const PATTERN_LABELS = {
-  "alt": "even alternate", "slow": "slow even", "gallop": "long A · short B", "rev-gallop": "short A · long B",
-  "double-tap": "A–A–B tap", "white-tick": "white between colours", "dark-gap": "dark flicker",
-  "heartbeat": "two beats + rest", "tri-color": "three-colour cycle", "a-heavy": "mostly A", "b-heavy": "mostly B",
-};
 
 const state = {
   games: [],
   muted: new Set(),      // game ids that will NOT flash (everything else is tracked)
   manual: {},            // per-game delay overrides {id: seconds}
   clocks: {},            // cached live-clock text {id: {text, cls}}
-  teams: {},             // {abbrev: {name, a, b, c, pattern}}
+  teams: {},             // {abbrev: {name, a, b}}
   enabled: true,
 };
 
@@ -578,7 +573,7 @@ function makeSwatch(hex) {
 }
 function teamSwatches(abbrev) {
   const t = state.teams[abbrev], out = [];
-  if (t) { out.push(makeSwatch(t.a), makeSwatch(t.b)); if (t.c) out.push(makeSwatch(t.c)); }
+  if (t) out.push(makeSwatch(t.a), makeSwatch(t.b));
   return out;
 }
 async function loadTeams() {
@@ -593,12 +588,12 @@ simTeam.addEventListener("change", () => {
   const box = $("sim-style"); box.innerHTML = "";
   const t = state.teams[simTeam.value]; if (!t) return;
   teamSwatches(simTeam.value).forEach(s => box.appendChild(s));
-  box.appendChild(document.createTextNode(`Rhythm: ${PATTERN_LABELS[t.pattern] || t.pattern}`));
+  box.appendChild(document.createTextNode(`${teamName(simTeam.value)} — flashes these two colours evenly`));
 });
 
 /* ── Games ──────────────────────────────────────────────────────────────── */
 const isPrimaryGame = g => g.away_abbrev === primarySel.value || g.home_abbrev === primarySel.value;
-const defaultDelayFor = g => isPrimaryGame(g) ? num("primary_delay_seconds", 35) : num("default_delay_seconds", 45);
+const defaultDelayFor = g => isPrimaryGame(g) ? num("primary_delay_seconds", 60) : num("default_delay_seconds", 45);
 const delayFor = g => (g.id in state.manual) ? state.manual[g.id] : defaultDelayFor(g);
 const isLive = s => s === "LIVE" || s === "CRIT";
 const isFinal = s => s === "FINAL" || s === "OFF";
@@ -606,7 +601,7 @@ const fmtTime = iso => new Date(iso).toLocaleTimeString([], { hour: "numeric", m
 
 function updateGamesHint() {
   $("games-hint").textContent =
-    `★ ${teamName(primarySel.value)} games use ${num("primary_delay_seconds", 35)}s · all other games ${num("default_delay_seconds", 45)}s. ` +
+    `★ ${teamName(primarySel.value)} games use ${num("primary_delay_seconds", 60)}s · all other games ${num("default_delay_seconds", 45)}s. ` +
     `Every game is tracked — untick one to mute it. Edit a delay to override that game (yellow). Changes apply instantly.`;
 }
 
@@ -644,8 +639,6 @@ function renderGames() {
     teamSwatches(g.away_abbrev).forEach(s => swatches.appendChild(s));
     if (state.teams[g.away_abbrev] && state.teams[g.home_abbrev]) { const sep = document.createElement("div"); sep.className = "swatch-sep"; swatches.appendChild(sep); }
     teamSwatches(g.home_abbrev).forEach(s => swatches.appendChild(s));
-    const pa = state.teams[g.away_abbrev], ph = state.teams[g.home_abbrev];
-    if (pa && ph) swatches.title = `${g.away_abbrev}: ${PATTERN_LABELS[pa.pattern]} · ${g.home_abbrev}: ${PATTERN_LABELS[ph.pattern]}`;
 
     const time = document.createElement("span");
     time.className = "game-time"; time.textContent = fmtTime(g.start_time_utc);

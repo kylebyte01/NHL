@@ -3,7 +3,7 @@ NHL Goal Light Controller
 ━━━━━━━━━━━━━━━━━━━━━━━━
 
 Monitors NHL games in real time and flashes one or more TP-Link Kasa smart
-bulbs in the scoring team's colours (and rhythm) whenever a goal is scored.
+bulbs in the scoring team's two colours whenever a goal is scored.
 
 Modes
 -----
@@ -14,7 +14,7 @@ Modes
 
 TV delay
 --------
-  * games involving the PRIMARY team (default MTL)  -> PRIMARY_DELAY_SECONDS (35)
+  * games involving the PRIMARY team (default MTL)  -> PRIMARY_DELAY_SECONDS (60)
   * every other game                                 -> DEFAULT_DELAY_SECONDS (45)
   * an explicit per-game override (GAME_DELAYS json) -> wins over both
 """
@@ -58,131 +58,91 @@ GIVE_UP_AFTER = timedelta(hours=4)  # postponed / never-started games
 MIN_STEP_GAP = 0.03                # never hammer a bulb faster than this
 
 DEFAULT_PRIMARY_TEAM = "MTL"
-DEFAULT_PRIMARY_DELAY = 35.0
+DEFAULT_PRIMARY_DELAY = 60.0
 DEFAULT_OTHER_DELAY = 45.0
 
 
-# ── team styles: colours + flash rhythm ──────────────────────────────────────
+# ── team styles: two colours, flashed evenly ─────────────────────────────────
 #
-# Many teams share colours (five red/black teams, a dozen blue ones), so every
-# team ALSO gets a flash rhythm.  One "beat" = flash_interval seconds.
-#   A / B  = the team's two main colours       W = white
-#   C      = accent colour (falls back to W)   D = dark (bulb switched OFF)
+# Every team flashes its two main brand colours, alternating with equal time.
+# A bulb cannot show black (it would just be "off"), so a team whose second
+# colour is black uses its other official colour instead (usually white).
 
-PATTERNS: dict[str, tuple[tuple[str, int], ...]] = {
-    "alt":        (("A", 1), ("B", 1)),                              # even A/B
-    "slow":       (("A", 2), ("B", 2)),                              # even, slow
-    "gallop":     (("A", 2), ("B", 1)),                              # long A, short B
-    "rev-gallop": (("A", 1), ("B", 2)),                              # short A, long B
-    "double-tap": (("A", 1), ("D", 1), ("A", 1), ("B", 2)),          # A-A-B
-    "white-tick": (("A", 1), ("W", 1), ("B", 1), ("W", 1)),          # white between
-    "dark-gap":   (("A", 1), ("D", 1), ("B", 1), ("D", 1)),          # flicker
-    "heartbeat":  (("A", 1), ("B", 1), ("D", 2)),                    # two beats + rest
-    "tri-color":  (("A", 1), ("B", 1), ("C", 1)),                    # three-colour cycle
-    "a-heavy":    (("A", 3), ("B", 1)),
-    "b-heavy":    (("A", 1), ("B", 3)),
-}
+BRIGHT_FLOOR = 60                 # dark brand colours (navy…) are lifted to this brightness
 
 
-def bulb_hsv(hex_color: str) -> tuple[int, int, int]:
-    """Convert a brand hex colour to what a bulb can show.
+@dataclass(frozen=True)
+class Shade:
+    """One light state a bulb can be told to show."""
+    kind: str                     # "hsv" | "white"
+    h: int = 0
+    s: int = 0
+    v: int = 100
+    kelvin: int = 4000            # only used when kind == "white"
 
-    Hue and saturation stay true to the brand colour.  Brightness is lifted for
-    dark brand colours (navy, burgundy…) because a dim LED just looks black, and
-    near-black is mapped to a deliberate 'dark' flash step.
+
+def bulb_shade(hex_color: str) -> Shade:
+    """Brand hex colour -> bulb light state.
+
+    Hue and saturation stay true to the brand colour; brightness is lifted for dark
+    shades (a dim LED just looks black).  White/silver use a white colour
+    temperature rather than 'saturation 0', which some bulbs render as their warm
+    default colour.
     """
     hx = hex_color.lstrip("#")
     r, g, b = (int(hx[i:i + 2], 16) / 255 for i in (0, 2, 4))
     h, s, v = colorsys.rgb_to_hsv(r, g, b)
     H, S, V = round(h * 360) % 360, round(s * 100), round(v * 100)
-    if V < 15 and S < 50:
-        return 0, 0, 3                      # black → dark
-    if S < 12:
-        return 0, 0, max(V, 55)             # white / silver
-    if V < 45 and S < 40:
-        return H, S, 12                     # dark steel-grey
-    return H, S, max(V, 60)                 # chromatic: keep hue, lift brightness
-
-
-@dataclass(frozen=True)
-class Shade:
-    """One thing a bulb can be told to show."""
-    kind: str          # "hsv" | "white" | "off"
-    h: int = 0
-    s: int = 0
-    v: int = 100
-
-
-def bulb_shade(hex_color: str) -> Shade:
-    """Brand hex colour -> bulb shade.  Near-black becomes a real OFF (not a dim
-    white, which reads as a white flash) and white/silver uses a white colour
-    temperature instead of 'saturation 0' (which some bulbs render as their
-    default warm colour)."""
-    h, s, v = bulb_hsv(hex_color)
-    if (h, s, v) == (0, 0, 3):
-        return Shade("off")
-    if s == 0 and h == 0:
-        return Shade("white", 0, 0, v)
-    return Shade("hsv", h, s, v)
+    if S < 12 or V < 15:                                    # white / silver / grey
+        return Shade("white", v=100, kelvin=4000 if hx.upper() == "FFFFFF" else 6500)
+    return Shade("hsv", H, S, max(V, BRIGHT_FLOOR))
 
 
 @dataclass(frozen=True)
 class TeamStyle:
-    a: str                        # primary colour (hex)
-    b: str                        # secondary colour (hex)
-    c: Optional[str]              # accent colour (hex) or None
-    pattern: str                  # key of PATTERNS
+    a: str                        # first colour (hex)
+    b: str                        # second colour (hex)
 
-    def palette(self) -> dict[str, Shade]:
-        white = Shade("white", 0, 0, 100)
-        return {
-            "A": bulb_shade(self.a),
-            "B": bulb_shade(self.b),
-            "C": bulb_shade(self.c) if self.c else white,
-            "W": white,
-            "D": Shade("off"),
-        }
-
-    def steps(self) -> tuple[tuple[str, int], ...]:
-        return PATTERNS[self.pattern]
+    def palette(self) -> tuple[Shade, Shade]:
+        return bulb_shade(self.a), bulb_shade(self.b)
 
 
-# Colours: official club brand colours as of the 2026-27 season.
+# Official club brand colours, 2026-27 season.
 TEAM_STYLES: dict[str, TeamStyle] = {
-    "ANA": TeamStyle("#F47A38", "#B9975B", None,      "gallop"),      # orange, gold
-    "BOS": TeamStyle("#FFB81C", "#000000", None,      "slow"),        # gold, black
-    "BUF": TeamStyle("#003087", "#FFB81C", None,      "white-tick"),  # royal blue, gold
-    "CGY": TeamStyle("#D2001C", "#FAAF19", None,      "rev-gallop"),  # red, yellow
-    "CAR": TeamStyle("#CE1126", "#000000", None,      "alt"),         # red, black
-    "CHI": TeamStyle("#CF0A2C", "#000000", None,      "double-tap"),  # red, black
-    "COL": TeamStyle("#6F263D", "#236192", "#A2AAAD", "tri-color"),   # burgundy, blue, silver
-    "CBJ": TeamStyle("#002654", "#CE1126", None,      "b-heavy"),        # union blue, red
-    "DAL": TeamStyle("#006847", "#8F8F8C", None,      "slow"),        # victory green, silver
-    "DET": TeamStyle("#CE1126", "#FFFFFF", None,      "gallop"),      # red, white
-    "EDM": TeamStyle("#041E42", "#FF4C00", None,      "double-tap"),  # royal navy, orange
-    "FLA": TeamStyle("#C8102E", "#041E42", None,      "dark-gap"),    # red, navy
-    "LAK": TeamStyle("#A2AAAD", "#000000", None,      "dark-gap"),    # silver, black
-    "MIN": TeamStyle("#154734", "#A6192E", "#EAAA00", "b-heavy"),     # forest green, red, gold
-    "MTL": TeamStyle("#AF1E2D", "#192168", None,      "alt"),         # red, blue
-    "NSH": TeamStyle("#FFB81C", "#041E42", None,      "rev-gallop"),  # gold, navy
-    "NJD": TeamStyle("#CE1126", "#000000", None,      "heartbeat"),   # red, black
-    "NYI": TeamStyle("#00539B", "#F47D30", None,      "slow"),        # blue, orange
-    "NYR": TeamStyle("#0038A8", "#CE1126", "#FFFFFF", "tri-color"),   # blue, red, white
-    "OTT": TeamStyle("#C52032", "#000000", None,      "b-heavy"),     # red, black
-    "PHI": TeamStyle("#F74902", "#000000", None,      "gallop"),      # orange, black
-    "PIT": TeamStyle("#FCB514", "#000000", None,      "white-tick"),  # gold, black
-    "SJS": TeamStyle("#006D75", "#EA7200", None,      "a-heavy"),  # pacific teal, orange
-    "SEA": TeamStyle("#99D9D9", "#E9072B", None,      "alt"),         # ice blue, red alert
-    "STL": TeamStyle("#002F87", "#FCB514", None,      "gallop"),      # blue, yellow
-    "TBL": TeamStyle("#002868", "#FFFFFF", None,      "alt"),         # blue, white
-    "TOR": TeamStyle("#00205B", "#FFFFFF", None,      "dark-gap"),    # blue, white
-    "UTA": TeamStyle("#6CACE4", "#010101", "#FFFFFF", "a-heavy"),     # mountain blue, rock black
-    "VAN": TeamStyle("#00205B", "#00843D", None,      "b-heavy"),     # blue, green
-    "VGK": TeamStyle("#B4975A", "#333F42", "#C8102E", "tri-color"),   # gold, steel grey, red
-    "WSH": TeamStyle("#C8102E", "#041E42", "#FFFFFF", "a-heavy"),     # red, navy, white
-    "WPG": TeamStyle("#004C97", "#FFFFFF", "#AC162C", "double-tap"),  # aviator blue, white, red
+    "ANA": TeamStyle("#F47A38", "#B9975B"),   # orange, gold
+    "BOS": TeamStyle("#FFB81C", "#FFFFFF"),   # gold, white
+    "BUF": TeamStyle("#003087", "#FFB81C"),   # royal blue, gold
+    "CGY": TeamStyle("#D2001C", "#FAAF19"),   # red, yellow
+    "CAR": TeamStyle("#CE1126", "#FFFFFF"),   # red, white
+    "CHI": TeamStyle("#CF0A2C", "#FFFFFF"),   # red, white
+    "COL": TeamStyle("#6F263D", "#236192"),   # burgundy, blue
+    "CBJ": TeamStyle("#002654", "#CE1126"),   # union blue, red
+    "DAL": TeamStyle("#006847", "#FFFFFF"),   # victory green, white
+    "DET": TeamStyle("#CE1126", "#FFFFFF"),   # red, white
+    "EDM": TeamStyle("#041E42", "#FF4C00"),   # navy blue, orange
+    "FLA": TeamStyle("#C8102E", "#041E42"),   # red, navy
+    "LAK": TeamStyle("#A2AAAD", "#FFFFFF"),   # silver (cool), white (neutral)
+    "MIN": TeamStyle("#154734", "#A6192E"),   # forest green, red
+    "MTL": TeamStyle("#AF1E2D", "#192168"),   # red, blue
+    "NSH": TeamStyle("#FFB81C", "#041E42"),   # gold, navy
+    "NJD": TeamStyle("#CE1126", "#FFFFFF"),   # red, white
+    "NYI": TeamStyle("#00539B", "#F47D30"),   # blue, orange
+    "NYR": TeamStyle("#0038A8", "#CE1126"),   # blue, red
+    "OTT": TeamStyle("#C52032", "#C69214"),   # red, gold
+    "PHI": TeamStyle("#F74902", "#FFFFFF"),   # orange, white
+    "PIT": TeamStyle("#FCB514", "#FFFFFF"),   # gold, white
+    "SJS": TeamStyle("#006D75", "#FFFFFF"),   # pacific teal, white
+    "SEA": TeamStyle("#99D9D9", "#E9072B"),   # ice blue, red alert
+    "STL": TeamStyle("#002F87", "#FCB514"),   # blue, yellow
+    "TBL": TeamStyle("#002868", "#FFFFFF"),   # blue, white
+    "TOR": TeamStyle("#00205B", "#FFFFFF"),   # blue, white
+    "UTA": TeamStyle("#6CACE4", "#FFFFFF"),   # mountain blue, salt white
+    "VAN": TeamStyle("#00205B", "#00843D"),   # blue, green
+    "VGK": TeamStyle("#B4975A", "#C8102E"),   # gold, red
+    "WSH": TeamStyle("#C8102E", "#041E42"),   # red, navy
+    "WPG": TeamStyle("#004C97", "#A2AAAD"),   # aviator blue, silver (cool white)
 }
-DEFAULT_STYLE = TeamStyle("#FF0000", "#FFFFFF", None, "alt")
+DEFAULT_STYLE = TeamStyle("#FF0000", "#FFFFFF")
 TEAM_COLORS = TEAM_STYLES   # backwards-compatible alias
 
 TEAM_NAMES: dict[str, str] = {
@@ -636,7 +596,7 @@ class KasaBulb:
         self._light = None
         self._last_update = 0.0
         self._raw_ok: Optional[bool] = None   # None = untested
-        self._lat: dict[tuple, float] = {}    # measured command time per shade, kept across flashes
+        self._lat: dict[tuple, float] = {}    # measured command time per colour, kept across flashes
         self._lock = asyncio.Lock()
 
     # -- connection management --------------------------------------------
@@ -715,19 +675,16 @@ class KasaBulb:
                         self.ip, exc)
             return False
 
-    async def _show(self, shade: Shade, snap: BulbSnapshot) -> None:
+    async def _show(self, shade: Shade, snap: BulbSnapshot, dim: bool = False) -> None:
         ms = self._config.flash_transition_ms
         v = _clamp(shade.v, 1, 100)
-        if shade.kind == "off":
-            if not await self._transition(on_off=0, transition_period=ms):
-                await self._bulb.turn_off()
-            return
-        if not snap.supports_color:                 # white-only bulb: rhythm via brightness
+        if not snap.supports_color:                 # white-only bulb: alternate bright / dim
+            v = 25 if dim else 100
             if not await self._transition(on_off=1, brightness=v, transition_period=ms):
                 await self._set_brightness(v, ms)
             return
         if shade.kind == "white":
-            ok = await self._transition(on_off=1, color_temp=WHITE_KELVIN, hue=0,
+            ok = await self._transition(on_off=1, color_temp=shade.kelvin, hue=0,
                                         saturation=0, brightness=v, transition_period=ms)
             if not ok:
                 await self._set_hsv(0, 0, v, ms)
@@ -799,59 +756,61 @@ class KasaBulb:
                 await self._reset()
 
     async def flash(self, style: TeamStyle, snap: BulbSnapshot) -> None:
-        """Play the team's pattern for `flash_duration` seconds with even beats.
+        """Alternate the team's two colours for `flash_duration` seconds, evenly.
 
-        Every step is given a place on a fixed timeline (one beat = flash_interval).
-        A command takes time to reach the bulb and bulbs answer some colours slower
-        than others, so each colour's latency is measured separately and the command
-        is sent that much early.  The visible colour change then lands on the beat
-        no matter which colour it is.  We never "catch up" after a stall: a step is
-        always shown for at least its full length.
+        Every colour change sits on a fixed timeline (one beat apart).  A command
+        takes time to reach the bulb and bulbs can answer one colour slower than the
+        other, so each colour's latency is measured separately and its command is
+        sent that much early, which makes the visible change land on the beat.  If
+        the bulb/Wi-Fi can't keep up with the configured beat, the beat is raised to
+        what it can do so both colours still get exactly equal time.  After a stall
+        we never "catch up" with a burst of commands.
         """
         cfg = self._config
-        palette = style.palette()
-        steps = style.steps()
+        shades = style.palette()
+        sig = [(sh.kind, sh.h, sh.s, sh.kelvin) for sh in shades]
         async with self._lock:
             try:
                 await self._connect()
                 loop = asyncio.get_running_loop()
                 end = loop.time() + cfg.flash_duration
                 lat = self._lat                     # command time per shade; persists between flashes
-                sig = {k: (sh.kind, sh.h, sh.s) for k, sh in palette.items()}
 
-                def est(key: str) -> float:
-                    if sig[key] in lat:
-                        return lat[sig[key]]
+                def est(k: int) -> float:
+                    if sig[k] in lat:
+                        return lat[sig[k]]
                     return statistics.mean(lat.values()) if lat else 0.0
 
-                grid = loop.time()                  # when the next step should become visible
+                def beat() -> float:
+                    slowest = max((lat[x] for x in sig if x in lat), default=0.0)
+                    return max(cfg.flash_interval, 1.3 * slowest)
+
+                grid = loop.time()                  # when the next colour should become visible
                 i = 0
                 while grid < end:
-                    key, beats = steps[i % len(steps)]
+                    k = i % 2
                     i += 1
-                    wait = (grid - est(key) / 2) - loop.time()
+                    wait = (grid - est(k) / 2) - loop.time()
                     if wait > 0:
                         await asyncio.sleep(wait)
                     t0 = loop.time()
-                    await self._show(palette[key], snap)
+                    await self._show(shades[k], snap, dim=(k == 1))
                     took = loop.time() - t0
-                    prev = lat.get(sig[key])
-                    # clamp outliers so one stalled reply can't distort later steps
-                    lat[sig[key]] = took if prev is None else 0.6 * prev + 0.4 * min(took, 2 * prev + 0.05)
-                    applied = t0 + lat[sig[key]] / 2     # when the bulb actually changed
-                    grid = max(grid, applied) + beats * cfg.flash_interval
-                # let the final step play out for its full length
-                tail = grid - loop.time()
+                    prev = lat.get(sig[k])
+                    # clamp outliers so one stalled reply can't distort later beats
+                    lat[sig[k]] = took if prev is None else 0.6 * prev + 0.4 * min(took, 2 * prev + 0.05)
+                    applied = t0 + lat[sig[k]] / 2  # when the bulb actually changed
+                    grid = max(grid, applied) + beat()
+                tail = grid - loop.time()           # let the last colour play its full beat
                 if tail > 0:
                     await asyncio.sleep(min(tail, 5.0))
-                used = {k: lat[sig[k]] for k in sig if sig[k] in lat and any(k == st[0] for st in steps)}
-                slowest = max(used.values(), default=0.0)
-                log.info("Flash timing on %s: %s", self.ip,
-                         ", ".join(f"{k} {v * 1000:.0f}ms" for k, v in sorted(used.items())))
-                if slowest > cfg.flash_interval:
-                    log.warning("Bulb %s needs ~%.0f ms per command, longer than one beat (%.0f ms) — "
-                                "steps can't be perfectly even; raise Beat to at least %.2f s.",
-                                self.ip, slowest * 1000, cfg.flash_interval * 1000, slowest * 1.2)
+                used = beat()
+                log.info("Flash timing on %s: A %.0fms, B %.0fms, beat %.2fs", self.ip,
+                         est(0) * 1000, est(1) * 1000, used)
+                if used > cfg.flash_interval + 0.01:
+                    log.warning("Bulb %s needs ~%.0f ms per command (Wi-Fi latency) — beat raised from "
+                                "%.2fs to %.2fs so both colours stay even.",
+                                self.ip, max(est(0), est(1)) * 1000, cfg.flash_interval, used)
             except Exception as exc:
                 log.error("Flash failed on bulb %s (%s) — will reconnect next time.", self.ip, exc)
                 await self._reset()

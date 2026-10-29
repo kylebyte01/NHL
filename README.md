@@ -1,6 +1,6 @@
 # NHL Goal Light 🚨
 
-Real-time NHL goal detector that flashes your **TP-Link Kasa smart bulb(s)** in the scoring team's colours **and rhythm**, with a mobile-friendly web GUI.
+Real-time NHL goal detector that flashes your **TP-Link Kasa smart bulb(s)** in the scoring team's two colours, alternating evenly, with a mobile-friendly web GUI.
 
 ## Features
 
@@ -8,9 +8,9 @@ Real-time NHL goal detector that flashes your **TP-Link Kasa smart bulb(s)** in 
 - ⚡ **Instant settings** — every change in the GUI is saved and applied immediately. No Apply button, no stop/start.
 - 🏒 **Live goal detection** — polls the NHL API every ~1 s (0.75 s in the final minute of a period)
 - 💡 **Multi-bulb support** — one IP per line; all bulbs flash in parallel
-- 🎨 **Every team is distinguishable** — official 2026-27 brand colours *plus* a per-team flash rhythm (see below)
+- 🎨 **Official team colours** — every team flashes its two brand colours, alternating with exactly equal time
 - ⭐ **Primary team** — pick your team (default **Montreal**); its games are starred, listed first, and use their own delay
-- ⏱ **TV delay** — primary team games 35 s, all other games 45 s, per-game overrides
+- ⏱ **TV delay** — primary team games 60 s, all other games 45 s, per-game overrides
 - 📱 **Works on phones** — the page scrolls normally, settings live in a slide-out drawer
 
 ## Quick start
@@ -28,37 +28,40 @@ handles every game day by itself. **Pause / Resume** is there if you want the li
 
 | Game                              | Delay                                   |
 |-----------------------------------|-----------------------------------------|
-| Involves the **primary team**     | `primary_delay_seconds` (default 35 s)  |
+| Involves the **primary team**     | `primary_delay_seconds` (default 60 s)  |
 | Any other game                    | `default_delay_seconds` (default 45 s)  |
 | Edited in the game row (yellow)   | that value, for that game only          |
 
 Edits apply to the next goal immediately. *Reset delays* clears per-game overrides.
 
-## Team colours & rhythms
+## Team colours
 
-Each team flashes its brand colours in its own rhythm (1 beat = the *Beat* setting, 0.45 s by default), so even teams that share colours
-(five red/black teams, a dozen blue ones) are told apart. Colours are the official hex values, converted to bulb HSV with brightness lifted for dark
-shades (navy, burgundy) so they don't just look black. Teams that look alike on a bulb are guaranteed to use different rhythm *families*.
+Each team flashes its two official brand colours, **alternating with exactly equal time**. A bulb can't show black (that would just be "off"), so where a
+team's second colour is black the other official colour is used instead, usually white. Dark colours such as navy are lifted to a visible brightness, and white/silver
+use a proper white colour temperature rather than a dim white.
 
-| Rhythm       | Pattern (A, B = team colours · C = accent · W = white · D = dark) |
-|--------------|-------------------------------------------------------------------|
-| alt          | A B (even)                                                        |
-| slow         | A A B B (even, slow)                                              |
-| gallop       | A A B                                                             |
-| rev-gallop   | A B B                                                             |
-| double-tap   | A D A B B                                                         |
-| white-tick   | A W B W                                                           |
-| dark-gap     | A D B D (flicker)                                                 |
-| heartbeat    | A B D D                                                           |
-| tri-color    | A B C                                                             |
-| a-heavy      | A A A B                                                           |
-| b-heavy      | A B B B                                                           |
+| Team | Colours | Team | Colours | Team | Colours |
+|------|---------|------|---------|------|---------|
+| ANA | orange · gold | MIN | green · red | SEA | ice blue · red |
+| BOS | gold · white | MTL | red · blue | STL | blue · yellow |
+| BUF | royal blue · gold | NSH | gold · navy | TBL | blue · white |
+| CGY | red · yellow | NJD | red · white | TOR | blue · white |
+| CAR | red · white | NYI | blue · orange | UTA | mountain blue · white |
+| CHI | red · white | NYR | blue · red | VAN | blue · green |
+| COL | burgundy · blue | OTT | red · gold | VGK | gold · red |
+| CBJ | navy · red | PHI | orange · white | WSH | red · navy |
+| DAL | green · white | PIT | gold · white | WPG | blue · silver |
+| DET | red · white | SJS | teal · white | LAK | silver · white |
+| EDM | navy · orange | FLA | red · navy | | |
 
 Use **Simulate Goal** to preview any team on your bulb. Utah is now the **Utah Mammoth** (UTA).
 
-**Even timing:** every step sits on a fixed beat timeline. Each colour's command latency is measured separately (bulbs often answer some colours slower than others) and the command is sent that much early, so every colour change lands on the beat and every step lasts its full length. After a stall it never "catches up" with a burst of commands. The log prints `Flash timing on <ip>: A 60ms, B 380ms` after each flash, and warns if your bulb needs longer per command than one beat (then raise **Beat**).
+**Even timing:** colour changes sit on a fixed timeline. Each colour's command latency is measured separately (bulbs can answer one colour slower than the other) and
+the command is sent that much early. If your Wi-Fi/bulb can't keep up with the *Colour time* you set (very fast values), it is raised automatically to what the bulb can do
+so both colours still get equal time. After a stall it never "catches up" with a burst of commands. The log shows `Flash timing on <ip>: A 60ms, B 380ms, beat 0.45s`.
 
-**No default-colour flicker:** flashes use the bulb's native command with `ignore_default` set, so it never flashes its stored default state between steps, and "dark" steps switch the bulb fully off instead of dimming it.
+**No default-colour flicker:** flashes use the bulb's native command with `ignore_default` set, so the bulb never flashes its stored default state between colours, and the
+light is never switched off or dimmed during a flash.
 
 ## Configuration reference
 
@@ -67,10 +70,10 @@ All of these are editable live in the sidebar.
 | Parameter                | Default | Description                                   |
 |--------------------------|---------|-----------------------------------------------|
 | `primary_team`           | MTL     | Team whose games use the primary delay        |
-| `primary_delay_seconds`  | 35 s    | TV delay for primary-team games               |
+| `primary_delay_seconds`  | 60 s    | TV delay for primary-team games               |
 | `default_delay_seconds`  | 45 s    | TV delay for all other games                  |
 | `flash_duration`         | 12 s    | How long the bulb flashes after a goal        |
-| `flash_interval`         | 0.45 s  | One beat of the rhythm (lower = faster)       |
+| `flash_interval`         | 0.45 s  | Time each colour is held (raised automatically if Wi-Fi is slow) |
 | `flash_quiet_window`     | 1.5 s   | Post-flash wait before restoring (bursts)     |
 | `flash_transition_ms`    | 0 ms    | Colour crossfade (0 = instant)                |
 | `poll_live_seconds`      | 1.0 s   | Poll rate during live play                    |
