@@ -724,11 +724,10 @@ class KasaBulb:
                         self.ip, exc)
             return False
 
-    async def _show(self, shade: Shade, snap: BulbSnapshot, dim: bool = False) -> None:
+    async def _show(self, shade: Shade, snap: BulbSnapshot) -> None:
         ms = self._config.flash_transition_ms
-        v = _clamp(shade.v, 1, 100)
-        if not snap.supports_color:                 # white-only bulb: alternate bright / dim
-            v = 25 if dim else 100
+        v = 100
+        if not snap.supports_color:                 # white-only bulb
             if not await self._transition(on_off=1, brightness=v, transition_period=ms):
                 await self._set_brightness(v, ms)
             return
@@ -843,7 +842,7 @@ class KasaBulb:
                     if wait > 0:
                         await asyncio.sleep(wait)
                     t0 = loop.time()
-                    await self._show(shades[k], snap, dim=(k == 1))
+                    await self._show(shades[k], snap)
                     took = loop.time() - t0
                     prev = lat.get(sig[k])
                     # clamp outliers so one stalled reply can't distort later beats
