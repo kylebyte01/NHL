@@ -173,6 +173,19 @@ header {
 .simulate-result.err { color: var(--red); }
 .sim-style { display: flex; align-items: center; gap: 8px; padding: 0 14px 10px; font-size: 11px; color: var(--muted); min-height: 26px; flex-wrap: wrap; }
 
+/* ── Team colour editor ── */
+[hidden] { display: none !important; }
+.color-edit { display: flex; align-items: center; gap: 12px; padding: 4px 14px 10px; flex-wrap: wrap; }
+.color-pick { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); }
+.color-pick input[type="color"] {
+  width: 46px; height: 34px; padding: 2px; background: var(--surface2);
+  border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer;
+}
+.color-pick code { font-size: 11px; color: var(--text); font-family: 'JetBrains Mono', monospace; }
+.color-preview { display: flex; height: 34px; width: 90px; border-radius: var(--radius); overflow: hidden; border: 1px solid var(--border); flex-shrink: 0; }
+.color-preview div { flex: 1; }
+.custom-tag { font-size: 10px; font-weight: 700; color: var(--yellow); border: 1px solid #5a4a10; border-radius: 3px; padding: 0 5px; }
+
 /* ── Log ── */
 .log-wrap {
   background: #0e0e0c; font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace; font-size: 11.5px;
@@ -358,14 +371,24 @@ input[type="number"] { -moz-appearance: textfield; }
     </div>
 
     <div class="panel">
-      <div class="panel-header"><span>Simulate Goal</span></div>
+      <div class="panel-header"><span>Team Colours &amp; Test</span></div>
       <div class="simulate-body">
         <div class="field" style="margin:0;flex:1;min-width:150px">
           <select id="sim-team"><option value="">— Pick a team —</option></select>
         </div>
-        <button class="btn btn-primary" id="sim-btn">⚡ Fire</button>
       </div>
-      <div class="sim-style" id="sim-style"></div>
+      <div class="color-edit" id="color-edit" hidden>
+        <label class="color-pick">Colour 1 <input type="color" id="color-a" /> <code id="hex-a"></code></label>
+        <label class="color-pick">Colour 2 <input type="color" id="color-b" /> <code id="hex-b"></code></label>
+        <div class="color-preview" id="color-preview" title="Preview"><div></div><div></div></div>
+        <span class="custom-tag" id="custom-tag" hidden>CUSTOM</span>
+        <button class="btn" id="color-reset">Reset team</button>
+      </div>
+      <div class="simulate-body" style="padding-top:0">
+        <button class="btn btn-primary" id="sim-btn">⚡ Test on bulb</button>
+        <button class="btn" id="colors-reset-all">Reset all colours</button>
+      </div>
+      <div class="sim-style" id="sim-style">Pick a team to change its colours. Changes are saved permanently and used for the next goal.</div>
       <div class="simulate-result" id="sim-result"></div>
     </div>
   </main>
@@ -394,7 +417,8 @@ const state = {
   muted: new Set(),      // game ids that will NOT flash (everything else is tracked)
   manual: {},            // per-game delay overrides {id: seconds}
   clocks: {},            // cached live-clock text {id: {text, cls}}
-  teams: {},             // {abbrev: {name, a, b}}
+  teams: {},             // {abbrev: {name, a, b, default_a, default_b, custom}}
+  custom: {},            // saved colour overrides {abbrev: {a, b}}
   enabled: true,
 };
 
@@ -434,6 +458,7 @@ async function flushSave() {
       setSaveState("error", "Rejected");
       appendLog(`ERROR: ${d.error || r.status}`, "error");
       await loadSettings();                 // snap fields back to the saved values
+      await refreshTeams();
     } else {
       setSaveState("saved", "Saved ✓");
       if (d.error) appendLog(`ERROR: ${d.error}`, "error");
@@ -449,6 +474,7 @@ function applySettingsToUi(s) {
   state.muted = new Set((s.muted_games || []).map(Number));
   state.manual = {};
   Object.entries(s.game_delays || {}).forEach(([k, v]) => { state.manual[k] = Number(v); });
+  state.custom = JSON.parse(JSON.stringify(s.team_colors || {}));
   state.enabled = s.enabled !== false;
 }
 async function loadSettings() {
@@ -576,20 +602,57 @@ function teamSwatches(abbrev) {
   if (t) out.push(makeSwatch(t.a), makeSwatch(t.b));
   return out;
 }
+function optionLabel(a) { return `${teamName(a)} (${a})${state.teams[a] && state.teams[a].custom ? " ✎" : ""}`; }
+function updateOptionLabels() {
+  [primarySel, simTeam].forEach(sel => [...sel.options].forEach(o => { if (o.value) o.textContent = optionLabel(o.value); }));
+}
+async function refreshTeams() {
+  try { state.teams = await (await fetch("/api/team-colors")).json(); } catch (_) { return; }
+  updateOptionLabels(); refreshColorEditor(); renderGames();
+}
 async function loadTeams() {
   try { state.teams = await (await fetch("/api/team-colors")).json(); } catch (_) { state.teams = {}; }
   const abbrevs = Object.keys(state.teams).sort((a, b) => teamName(a).localeCompare(teamName(b)));
   abbrevs.forEach(a => {
-    const label = `${teamName(a)} (${a})`;
-    [primarySel, simTeam].forEach(sel => { const o = document.createElement("option"); o.value = a; o.textContent = label; sel.appendChild(o); });
+    [primarySel, simTeam].forEach(sel => { const o = document.createElement("option"); o.value = a; o.textContent = optionLabel(a); sel.appendChild(o); });
   });
 }
-simTeam.addEventListener("change", () => {
-  const box = $("sim-style"); box.innerHTML = "";
-  const t = state.teams[simTeam.value]; if (!t) return;
-  teamSwatches(simTeam.value).forEach(s => box.appendChild(s));
-  box.appendChild(document.createTextNode(`${teamName(simTeam.value)} — flashes these two colours evenly`));
+
+/* ── Team colour editor: pick, preview, save permanently ─────────────────── */
+const sameHex = (x, y) => x.toUpperCase() === y.toUpperCase();
+function refreshColorEditor() {
+  const t = state.teams[simTeam.value];
+  $("color-edit").hidden = !t;
+  if (!t) return;
+  if (document.activeElement !== $("color-a")) $("color-a").value = t.a.toLowerCase();
+  if (document.activeElement !== $("color-b")) $("color-b").value = t.b.toLowerCase();
+  $("hex-a").textContent = t.a.toUpperCase(); $("hex-b").textContent = t.b.toUpperCase();
+  const [pa, pb] = $("color-preview").children;
+  pa.style.background = t.a; pb.style.background = t.b;
+  $("custom-tag").hidden = !t.custom;
+  $("color-reset").disabled = !t.custom;
+  $("colors-reset-all").disabled = !Object.keys(state.custom).length;
+}
+let _renderQueued = false;
+function renderSoon() { if (_renderQueued) return; _renderQueued = true; requestAnimationFrame(() => { _renderQueued = false; renderGames(); }); }
+
+function setTeamColors(abbrev, a, b) {
+  const t = state.teams[abbrev]; if (!t) return;
+  t.a = a.toUpperCase(); t.b = b.toUpperCase();
+  t.custom = !(sameHex(t.a, t.default_a) && sameHex(t.b, t.default_b));
+  if (t.custom) state.custom[abbrev] = { a: t.a, b: t.b }; else delete state.custom[abbrev];
+  queueSave({ team_colors: state.custom }, 700);          // saved to settings.json, pushed to the monitor
+  updateOptionLabels(); refreshColorEditor(); renderSoon();
+}
+["color-a", "color-b"].forEach(id => $(id).addEventListener("input", () => setTeamColors(simTeam.value, $("color-a").value, $("color-b").value)));
+$("color-reset").addEventListener("click", () => { const t = state.teams[simTeam.value]; if (t) setTeamColors(simTeam.value, t.default_a, t.default_b); });
+$("colors-reset-all").addEventListener("click", () => {
+  Object.keys(state.custom).forEach(ab => { const t = state.teams[ab]; if (t) { t.a = t.default_a; t.b = t.default_b; t.custom = false; } });
+  state.custom = {}; queueSave({ team_colors: {} }, 100);
+  updateOptionLabels(); refreshColorEditor(); renderGames();
 });
+simTeam.addEventListener("change", refreshColorEditor);
+
 
 /* ── Games ──────────────────────────────────────────────────────────────── */
 const isPrimaryGame = g => g.away_abbrev === primarySel.value || g.home_abbrev === primarySel.value;
@@ -794,7 +857,7 @@ $("sim-btn").addEventListener("click", async () => {
   setInterval(pollStatus, 3000);
   setInterval(() => loadGames(), 60000);
   setInterval(refreshLiveClocks, 30000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadSettings().then(renderGames); pollStatus(); } });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { loadSettings().then(refreshTeams); pollStatus(); } });
 })();
 </script>
 </body>

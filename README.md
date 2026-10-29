@@ -9,6 +9,7 @@ Real-time NHL goal detector that flashes your **TP-Link Kasa smart bulb(s)** in 
 - 🏒 **Live goal detection** — polls the NHL API every ~1 s (0.75 s in the final minute of a period)
 - 💡 **Multi-bulb support** — one IP per line; all bulbs flash in parallel
 - 🎨 **Official team colours** — every team flashes its two brand colours, alternating with exactly equal time
+- 🖌 **Edit any team's colours in the GUI** — saved permanently, applied to the next goal
 - ⭐ **Primary team** — pick your team (default **Montreal**); its games are starred, listed first, and use their own delay
 - ⏱ **TV delay** — primary team games 60 s, all other games 45 s, per-game overrides
 - 📱 **Works on phones** — the page scrolls normally, settings live in a slide-out drawer
@@ -54,7 +55,14 @@ use a proper white colour temperature rather than a dim white.
 | DET | red · white | SJS | teal · white | LAK | silver · white |
 | EDM | navy · orange | FLA | red · navy | | |
 
-Use **Simulate Goal** to preview any team on your bulb. Utah is now the **Utah Mammoth** (UTA).
+### Changing a team's colours
+
+In **Team Colours & Test**, pick a team and change either colour with the colour picker. You'll see a live preview, and the change is **saved permanently**
+(in `settings.json`) and used for the very next goal, with no restart. Customised teams are marked ✎ in the team lists. **Reset team** restores that team's official
+colours and **Reset all colours** clears every override. **Test on bulb** flashes the team's current colours on your bulb. Bulbs can't show black, so choose
+visible colours (very dark picks are brightened automatically).
+
+Use **Test on bulb** to preview any team on your bulb. Utah is now the **Utah Mammoth** (UTA).
 
 **Even timing:** colour changes sit on a fixed timeline. Each colour's command latency is measured separately (bulbs can answer one colour slower than the other) and
 the command is sent that much early. If your Wi-Fi/bulb can't keep up with the *Colour time* you set (very fast values), it is raised automatically to what the bulb can do

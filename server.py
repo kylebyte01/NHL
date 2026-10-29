@@ -95,6 +95,7 @@ def _default_settings() -> dict:
         "primary_team": main.DEFAULT_PRIMARY_TEAM,
         "muted_games": [],                   # game ids that should NOT flash
         "game_delays": {},                   # {"gameId": seconds} per-game overrides
+        "team_colors": {},                   # {"EDM": {"a": "#RRGGBB", "b": "#RRGGBB"}} user colour overrides
     }
     for name in main.NUMERIC_ENV_FIELDS:
         s[name] = getattr(base, name)
@@ -144,6 +145,20 @@ def _clean_settings(body: dict, strict: bool = True) -> dict:
             out["muted_games"] = sorted({int(g) for g in (body["muted_games"] or [])})
         except (TypeError, ValueError):
             bad("muted_games must be a list of integers.")
+
+    if "team_colors" in body:
+        raw_colors = body["team_colors"] or {}
+        if not isinstance(raw_colors, dict):
+            bad("team_colors must be an object.")
+        else:
+            cleaned = main._clean_team_colors(raw_colors)
+            if strict and len(cleaned) != len(raw_colors):
+                bad("team_colors: unknown team or colour not in #RRGGBB format.")
+            # an entry equal to the brand colours is not an override
+            out["team_colors"] = {
+                t: {"a": a, "b": b} for t, (a, b) in cleaned.items()
+                if (a, b) != (main.TEAM_STYLES[t].a.upper(), main.TEAM_STYLES[t].b.upper())
+            }
 
     if "game_delays" in body:
         delays: dict[str, float] = {}
@@ -205,7 +220,7 @@ def _settings_copy() -> dict:
 def _live_payload(s: dict) -> dict:
     """The subset of settings the running monitor understands."""
     payload = {name: s[name] for name in main.NUMERIC_ENV_FIELDS}
-    payload.update({k: s[k] for k in ("primary_team", "bulb_ips", "muted_games", "game_delays")})
+    payload.update({k: s[k] for k in ("primary_team", "bulb_ips", "muted_games", "game_delays", "team_colors")})
     return payload
 
 
@@ -248,6 +263,7 @@ def _spawn_env(s: dict) -> dict[str, str]:
         "BULB_IP": ",".join(s["bulb_ips"]),
         "PRIMARY_TEAM": s["primary_team"],
         "GAME_DELAYS": json.dumps(s["game_delays"]),
+        "TEAM_COLOR_OVERRIDES": json.dumps(s["team_colors"]),
         "MUTED_GAMES": ",".join(str(g) for g in s["muted_games"]),
         "DAEMON": "1",
         "PYTHONUNBUFFERED": "1",
@@ -459,13 +475,18 @@ def api_game_state(game_id: int):
 
 @app.route("/api/team-colors")
 def api_team_colors():
-    return jsonify({
-        abbrev: {
+    """Every team's effective colours (your override if set) plus its brand defaults."""
+    custom = main._clean_team_colors(_settings_copy().get("team_colors", {}))
+    out = {}
+    for abbrev, st in main.TEAM_STYLES.items():
+        a, b = custom.get(abbrev, (st.a, st.b))
+        out[abbrev] = {
             "name": main.TEAM_NAMES.get(abbrev, abbrev),
-            "a": st.a, "b": st.b,
+            "a": a, "b": b,
+            "default_a": st.a, "default_b": st.b,
+            "custom": abbrev in custom,
         }
-        for abbrev, st in main.TEAM_STYLES.items()
-    })
+    return jsonify(out)
 
 
 # ── log streaming ────────────────────────────────────────────────────────────
@@ -552,6 +573,7 @@ def api_simulate_goal():
             flash_interval=float(s["flash_interval"]),
             flash_transition_ms=int(s["flash_transition_ms"]),
             restore_transition_ms=int(s["restore_transition_ms"]),
+            team_colors=main._clean_team_colors(s.get("team_colors", {})),
         )
 
         async def _simulate() -> None:

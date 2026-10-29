@@ -256,6 +256,7 @@ class AppConfig:
     default_delay_seconds: float = DEFAULT_OTHER_DELAY
     game_delays: dict = field(default_factory=dict)      # {game_id: seconds}
     muted_games: set = field(default_factory=set)        # {game_id}
+    team_colors: dict = field(default_factory=dict)      # {'EDM': ('#RRGGBB', '#RRGGBB')} user overrides
 
     def delay_for(self, game: GameInfo) -> float:
         """TV delay (s) for a game: explicit override > primary team > default."""
@@ -265,6 +266,13 @@ class AppConfig:
         if self.is_primary_game(game):
             return max(0.0, self.primary_delay_seconds)
         return max(0.0, self.default_delay_seconds)
+
+    def style_for(self, team: str) -> TeamStyle:
+        """The team's colours: the user's override if there is one, else the brand colours."""
+        custom = self.team_colors.get(team)
+        if custom:
+            return TeamStyle(custom[0], custom[1])
+        return TEAM_STYLES.get(team, DEFAULT_STYLE)
 
     def is_primary_game(self, game: GameInfo) -> bool:
         return self.primary_team in (game.away_abbrev, game.home_abbrev)
@@ -310,6 +318,12 @@ class AppConfig:
                 self.muted_games = muted
                 changed.add("muted_games")
 
+        if "team_colors" in data:
+            colors = _clean_team_colors(data["team_colors"])
+            if colors != self.team_colors:
+                self.team_colors = colors
+                changed.add("team_colors")
+
         return changed
 
     @classmethod
@@ -332,6 +346,7 @@ class AppConfig:
             primary_team=primary,
             game_delays=_parse_game_delays(os.getenv("GAME_DELAYS", "")),
             muted_games=_clean_id_set((os.getenv("MUTED_GAMES", "") or "").split(",")),
+            team_colors=_parse_team_colors(os.getenv("TEAM_COLOR_OVERRIDES", "")),
             **kwargs,
         )
 
@@ -386,6 +401,40 @@ def _parse_game_delays(raw: str) -> dict[int, float]:
         return _clean_game_delays(json.loads(raw))
     except ValueError:
         log.warning("GAME_DELAYS is not valid JSON — ignoring.")
+        return {}
+
+
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _clean_team_colors(data) -> dict[str, tuple[str, str]]:
+    """{'EDM': ['#112233', '#445566']} or {'EDM': {'a':..,'b':..}} -> {'EDM': ('#112233','#445566')}.
+    Unknown teams and malformed colours are dropped."""
+    out: dict[str, tuple[str, str]] = {}
+    if not isinstance(data, dict):
+        return out
+    for team, pair in data.items():
+        team = str(team).strip().upper()
+        if team not in TEAM_STYLES:
+            continue
+        if isinstance(pair, dict):
+            pair = (pair.get("a"), pair.get("b"))
+        try:
+            a, b = pair
+        except (TypeError, ValueError):
+            continue
+        if isinstance(a, str) and isinstance(b, str) and _HEX_RE.match(a) and _HEX_RE.match(b):
+            out[team] = (a.upper(), b.upper())
+    return out
+
+
+def _parse_team_colors(raw: str) -> dict[str, tuple[str, str]]:
+    if not raw or not raw.strip():
+        return {}
+    try:
+        return _clean_team_colors(json.loads(raw))
+    except ValueError:
+        log.warning("TEAM_COLOR_OVERRIDES is not valid JSON — ignoring.")
         return {}
 
 
@@ -860,7 +909,7 @@ class BulbController:
         await asyncio.gather(*(b.restore(snaps[b.ip]) for b in bulbs))
 
     async def flash_team(self, team: str, snaps: dict[str, BulbSnapshot]) -> None:
-        style = TEAM_STYLES.get(team, DEFAULT_STYLE)
+        style = self._config.style_for(team)
         bulbs = [b for b in self._bulbs if b.ip in snaps]
         await asyncio.gather(*(b.flash(style, snaps[b.ip]) for b in bulbs))
 
